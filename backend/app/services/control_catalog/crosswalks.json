@@ -1,0 +1,25 @@
+{
+  "_comment": "Derived-framework crosswalk. NIST CSF 2.0 function/subcategory -> ISO/IEC 27001:2022 Annex A control. The set of keys here is the authoritative list of valid nist_csf_functions referenced by compliance_mappings.json. ISO 27001 references are derived (executive/appendix use only) and must not imply audit readiness.",
+  "nist_csf_to_iso27001": {
+    "PR.AA-01": {
+      "iso_27001": "A.5.16",
+      "label": "Identity management"
+    },
+    "PR.AA-03": {
+      "iso_27001": "A.8.5",
+      "label": "Secure authentication"
+    },
+    "PR.AA-05": {
+      "iso_27001": "A.5.15",
+      "label": "Access control"
+    },
+    "PR.PS-01": {
+      "iso_27001": "A.8.9",
+      "label": "Configuration management"
+    },
+    "DE.CM-03": {
+      "iso_27001": "A.8.16",
+      "label": "Monitoring activities"
+    }
+  }
+}

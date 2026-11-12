@@ -1,0 +1,99 @@
+# Cloud Locksmith Core: demo stack.
+#
+#   docker compose up --build
+#   then open http://localhost:3000 and click "Sign in to the demo".
+#
+# The demo serves a recorded scan of a fictional tenant. It makes no Microsoft calls,
+# needs no .env file, and refuses every change except the fix simulation. Every value
+# below is a public, demo-only placeholder; the API refuses to start in demo mode
+# with real Microsoft credentials or ENVIRONMENT=production.
+
+x-demo-api-env: &demo-api-env
+  ENVIRONMENT: development
+  DEMO_MODE: "true"
+  ENABLE_SCHEDULER: "false"
+  ENABLE_AUTO_REMEDIATION: "false"
+  DATABASE_URL: postgresql://cloudlocksmith:cloudlocksmith-demo@postgres:5432/cloudlocksmith
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  BACKEND_PUBLIC_URL: http://localhost:8000
+  FRONTEND_URL: http://localhost:3000
+  CORS_ALLOWED_ORIGINS: http://localhost:3000
+  MICROSOFT_CLIENT_ID: demo-mode-no-microsoft-app
+  MICROSOFT_CLIENT_SECRET: demo-mode-no-microsoft-secret
+  MICROSOFT_REDIRECT_URI: http://localhost:8000/api/v1/auth/microsoft/callback
+  SESSION_SECRET: demo-only-session-secret-not-for-production
+  APP_JWT_SECRET: demo-only-jwt-secret-not-for-production
+  ENCRYPTION_KEY: ZGVtby1tb2RlLW9ubHktbm90LWEtc2VjcmV0LWtleSE=  # base64("demo-mode-only-not-a-secret-key!")
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: cloudlocksmith
+      POSTGRES_PASSWORD: cloudlocksmith-demo
+      POSTGRES_DB: cloudlocksmith
+    volumes:
+      - demo_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudlocksmith -d cloudlocksmith"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [backend]
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [backend]
+
+  # One-shot: apply migrations, then seed the fictional demo tenant (idempotent).
+  # The seed job and the API share one image, so the backend is built once.
+  seed:
+    build: ./backend
+    image: cloud-locksmith-core-backend:local
+    environment: *demo-api-env
+    command: ["python", "-m", "app.demo.seed"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [backend]
+
+  api:
+    image: cloud-locksmith-core-backend:local
+    pull_policy: never
+    environment: *demo-api-env
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks: [backend, frontend]
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_DEMO_MODE: "true"
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [frontend]
+
+networks:
+  # Postgres and Redis are reachable only from the seed job and the API.
+  backend:
+    internal: true
+  frontend: {}
+
+volumes:
+  demo_db:

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cyber Insurance Readiness Report</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    body { font-family: Arial, sans-serif; color: #1f2937; font-size: 11px; line-height: 1.45; }
+    h1, h2, h3, p { margin: 0; }
+    .hero { background: linear-gradient(135deg, #0f172a, #1d4ed8); color: #fff; border-radius: 14px; padding: 18px 20px; margin-bottom: 14px; }
+    .hero h1 { font-size: 23px; margin-bottom: 6px; }
+    .hero-meta { margin-top: 10px; font-size: 10px; color: #dbeafe; }
+    .hero-meta div { margin-top: 2px; }
+    .verdict-banner { border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; color: #fff; }
+    .verdict-banner.eligible { background: #166534; }
+    .verdict-banner.conditional { background: #1d4ed8; }
+    .verdict-banner.elevated { background: #b45309; }
+    .verdict-banner.critical { background: #991b1b; }
+    .verdict-banner h2 { font-size: 19px; margin-bottom: 4px; }
+    .verdict-banner p { font-size: 11px; color: #f1f5f9; }
+    .summary-panel { border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+    .summary-panel h2 { font-size: 15px; color: #1e3a8a; margin-bottom: 6px; }
+    .summary-panel p + p { margin-top: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0 14px; }
+    .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 12px 0 14px; }
+    .card { border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; background: #f8fafc; }
+    .card-label { font-size: 9px; text-transform: uppercase; color: #6b7280; margin-bottom: 5px; letter-spacing: 0.05em; }
+    .card-value { font-size: 21px; font-weight: bold; color: #111827; }
+    .subtle { color: #6b7280; font-size: 10px; margin-top: 4px; }
+    .section { margin-top: 16px; page-break-inside: avoid; }
+    .section-title { font-size: 16px; color: #111827; margin-bottom: 8px; }
+    .finding { border: 1px solid #d1d5db; border-left: 5px solid #9ca3af; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; background: #fff; }
+    .finding.critical { border-left-color: #b91c1c; background: #fef2f2; }
+    .finding.high { border-left-color: #c2410c; background: #fff7ed; }
+    .finding.medium { border-left-color: #b45309; background: #fffbeb; }
+    .finding-title { font-size: 13px; font-weight: bold; color: #111827; margin-bottom: 6px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: bold; background: #e5e7eb; color: #111827; margin-bottom: 6px; }
+    .badge.critical { background: #fee2e2; color: #991b1b; }
+    .badge.high { background: #ffedd5; color: #9a3412; }
+    .badge.medium { background: #fef3c7; color: #92400e; }
+    .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: bold; }
+    .chip.strong { background: #dcfce7; color: #166534; }
+    .chip.moderate { background: #dbeafe; color: #1e40af; }
+    .chip.needs { background: #fee2e2; color: #991b1b; }
+    .chip.verified { background: #dcfce7; color: #166534; }
+    .chip.noteval { background: #f3f4f6; color: #6b7280; }
+    .rec-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .rec-column { border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; background: #f8fafc; }
+    .rec-column h3 { font-size: 13px; margin-bottom: 8px; color: #111827; }
+    .rec-item { margin-bottom: 8px; }
+    .rec-item strong { display: block; margin-bottom: 2px; color: #111827; }
+    .score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .score-card { border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; background: #fff; }
+    .score-card .score { font-size: 24px; font-weight: bold; color: #111827; margin: 4px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #eff6ff; color: #1d4ed8; }
+    .status-pass { color: #166534; font-weight: bold; }
+    .status-fail { color: #991b1b; font-weight: bold; }
+    .integrity { border: 1px solid #c7d2fe; background: #eef2ff; border-radius: 12px; padding: 14px 16px; }
+    .empty-note { color: #6b7280; font-style: italic; padding: 8px 0; }
+    .footer { margin-top: 20px; font-size: 10px; color: #6b7280; border-top: 1px solid #d1d5db; padding-top: 10px; }
+  </style>
+</head>
+<body>
+  {%- macro severity_display(sev) %}{% if sev == 'Critical' %}Material{% elif sev == 'High' %}Significant{% elif sev == 'Medium' %}Advisory{% else %}{{ sev }}{% endif %}{% endmacro %}
+
+  <div class="hero">
+    <h1>Cyber Insurance Readiness Report</h1>
+    <p>Continuously verified Microsoft 365 identity-control evidence for insurers, brokers, underwriters, and MSPs.</p>
+    <div class="hero-meta">
+      <div><strong>Organization:</strong> {{ report.header.tenant_name }}</div>
+      <div><strong>Identifier:</strong> {{ report.header.tenant_id }}</div>
+      <div><strong>Reporting Period:</strong> {{ report.header.reporting_period }}</div>
+      <div><strong>Attestation Date:</strong> {{ report.header.attestation_date }}</div>
+    </div>
+  </div>
+
+  {% set tier = report.verdict.tier_state %}
+  <div class="verdict-banner {{ 'eligible' if tier == 'READY' else 'conditional' if tier == 'CONDITIONAL' else 'elevated' if tier == 'HIGH_RISK' else 'critical' }}">
+    <h2>{{ report.verdict.label }}</h2>
+    <p>{{ report.verdict.meaning }}</p>
+  </div>
+
+  <!-- Executive Narrative (positioned first for underwriter/broker readers) -->
+  <div class="summary-panel">
+    <h2>{{ report.executive_summary.headline }}</h2>
+    <p>{{ report.executive_summary.summary }}</p>
+    <p>{{ report.executive_summary.outlook }}</p>
+  </div>
+
+  <!-- Posture Trend & Risk Reduction -->
+  <div class="section">
+    <h2 class="section-title">Posture Trend &amp; Risk Reduction</h2>
+    {% if report.trend.has_prior %}
+    <div class="grid-5">
+      <div class="card"><div class="card-label">Previous Score</div><div class="card-value">{{ report.trend.previous_score }}</div></div>
+      <div class="card"><div class="card-label">Current Score</div><div class="card-value">{{ report.trend.current_score }}</div><div class="subtle">&#916; {{ report.trend.delta }}</div></div>
+      <div class="card"><div class="card-label">Findings</div><div class="card-value">{{ report.trend.prev_open_findings }} &#8594; {{ report.trend.current_open_findings }}</div></div>
+      <div class="card"><div class="card-label">Remediations</div><div class="card-value">{{ report.trend.remediations_completed }}</div><div class="subtle">completed</div></div>
+      <div class="card"><div class="card-label">Risk Reduction</div><div class="card-value">{% if report.trend.risk_reduction_pct is not none %}{{ report.trend.risk_reduction_pct }}%{% else %}&#8212;{% endif %}</div></div>
+    </div>
+    {% else %}
+    <p class="empty-note">{{ report.trend.summary }}</p>
+    {% endif %}
+  </div>
+
+  <!-- Continuous Verification Status -->
+  <div class="section">
+    <h2 class="section-title">Continuous Verification Status</h2>
+    <div class="grid">
+      <div class="card"><div class="card-label">Last Assessment</div><div class="card-value" style="font-size:13px;">{{ report.continuous_verification.last_assessment }}</div></div>
+      <div class="card"><div class="card-label">Monitoring Status</div><div class="card-value" style="font-size:13px;">{{ report.continuous_verification.monitoring_status }}</div></div>
+      <div class="card"><div class="card-label">Controls Verified</div><div class="card-value">{{ report.continuous_verification.controls_verified }}</div></div>
+      <div class="card"><div class="card-label">Evidence Age</div><div class="card-value" style="font-size:15px;">{{ report.continuous_verification.evidence_age }}</div></div>
+    </div>
+  </div>
+
+  <!-- Insurance-Relevant Control Coverage -->
+  <div class="section">
+    <h2 class="section-title">Insurance-Relevant Control Coverage</h2>
+    <div class="grid-5">
+      {% for c in report.control_coverage %}
+      <div class="card">
+        <div class="card-label">{{ c.category }}</div>
+        <span class="chip {{ 'verified' if c.status == 'Verified' else 'noteval' }}">{{ c.status }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Insurance Impact Summary -->
+  <div class="section">
+    <h2 class="section-title">Insurance Impact Summary</h2>
+    <table>
+      <thead><tr><th>Category</th><th>Status</th><th>What it means</th></tr></thead>
+      <tbody>
+        {% for row in report.insurance_impact %}
+        <tr>
+          <td>{{ row.category }}</td>
+          <td><span class="chip {{ 'strong' if row.status == 'Strong' else 'moderate' if row.status == 'Moderate' else 'needs' }}">{{ row.status }}</span></td>
+          <td>{{ row.commentary }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Controls Verified Summary -->
+  <div class="section">
+    <h2 class="section-title">Controls Verified Summary</h2>
+    <div class="grid">
+      <div class="card"><div class="card-label">Controls Verified</div><div class="card-value">{{ report.controls_verified_summary.verified }}</div></div>
+      <div class="card"><div class="card-label">Controls Passing</div><div class="card-value">{{ report.controls_verified_summary.passing }}</div></div>
+      <div class="card"><div class="card-label">Requiring Action</div><div class="card-value">{{ report.controls_verified_summary.requiring_action }}</div></div>
+      <div class="card"><div class="card-label">Remediated (Period)</div><div class="card-value">{{ report.controls_verified_summary.remediated }}</div></div>
+    </div>
+  </div>
+
+  <!-- Risk-Based Findings -->
+  <div class="section">
+    <h2 class="section-title">Risk-Based Findings</h2>
+    {% for finding in report.findings %}
+    <div class="finding {{ finding.severity|lower }}">
+      <div class="badge {{ finding.severity|lower }}">{{ severity_display(finding.severity) }}</div>
+      <div class="finding-title">{{ finding.title }}</div>
+      <p><strong>Why it matters:</strong> {{ finding.risk }}</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Remediation History -->
+  <div class="section">
+    <h2 class="section-title">Remediation History</h2>
+    {% if report.remediation_history.rows %}
+    <table>
+      <thead><tr><th>Control</th><th>Previous Status</th><th>Action Taken</th><th>Remediation Date</th><th>Current Status</th><th>Rollback Available</th></tr></thead>
+      <tbody>
+        {% for r in report.remediation_history.rows %}
+        <tr>
+          <td>{{ r.control_id }}</td>
+          <td class="status-fail">{{ r.previous_status }}</td>
+          <td>{{ r.action_taken }}</td>
+          <td>{{ r.remediation_date }}</td>
+          <td class="{{ 'status-pass' if r.current_status == 'Pass' else 'status-fail' }}">{{ r.current_status }}</td>
+          <td>{{ r.rollback_available }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty-note">{{ report.remediation_history.empty_message }}</p>
+    {% endif %}
+  </div>
+
+  <!-- Insurance Readiness (4-question) -->
+  <div class="section">
+    <h2 class="section-title">Insurance Readiness &#8212; Risk View</h2>
+    <table>
+      <thead><tr><th>Area</th><th>What is the risk?</th><th>Severity</th><th>Improving?</th><th>Evidence</th></tr></thead>
+      <tbody>
+        {% for row in report.insurance_readiness_detail %}
+        <tr>
+          <td>{{ row.area }}</td>
+          <td>{{ row.risk }}</td>
+          <td>{{ severity_display(row.severity) }}</td>
+          <td>{{ row.improving }}</td>
+          <td>{{ row.evidenced }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if report.framework_coverage %}
+  <div class="section">
+    <h2 class="section-title">Compliance Framework Coverage</h2>
+    <p class="subtle">Coverage reflects how many <strong>mapped</strong> controls were evaluated and passing.</p>
+    <table>
+      <thead><tr><th>Framework</th><th>Mapped Controls Evaluated</th><th>Passing</th><th>Failing</th></tr></thead>
+      <tbody>
+        {% for framework_id, cov in report.framework_coverage.items() %}
+        <tr><td>{{ cov.framework }}</td><td>{{ cov.mapped_controls }}</td><td class="status-pass">{{ cov.passing }}</td><td class="{{ 'status-fail' if cov.failing else '' }}">{{ cov.failing }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if report.control_compliance %}
+  <div class="section">
+    <h2 class="section-title">Control Framework Mapping</h2>
+    <table>
+      <thead><tr><th>Control</th><th>Status</th><th>Insurance</th><th>CIS</th><th>SCuBA</th><th>NIST CSF</th></tr></thead>
+      <tbody>
+        {% for row in report.control_compliance %}
+        <tr><td>{{ row.control_id }}</td><td class="{{ 'status-pass' if row.passed else 'status-fail' }}">{{ 'Pass' if row.passed else 'Fail' }}</td><td>{{ row.insurance_category }}</td><td>{{ row.cis_refs }}</td><td>{{ row.scuba_refs }}</td><td>{{ row.nist_functions }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Recommended Actions -->
+  <div class="section">
+    <h2 class="section-title">Recommended Actions</h2>
+    <div class="rec-grid">
+      <div class="rec-column"><h3>Immediate</h3>{% for item in report.recommendations.Immediate %}<div class="rec-item"><strong>{{ item.title }}</strong><span>{{ item.action }}</span></div>{% endfor %}</div>
+      <div class="rec-column"><h3>Short-term</h3>{% for item in report.recommendations['Short-term'] %}<div class="rec-item"><strong>{{ item.title }}</strong><span>{{ item.action }}</span></div>{% endfor %}</div>
+      <div class="rec-column"><h3>Ongoing</h3>{% for item in report.recommendations.Ongoing %}<div class="rec-item"><strong>{{ item.title }}</strong><span>{{ item.action }}</span></div>{% endfor %}</div>
+    </div>
+  </div>
+
+  <!-- Posture Score Breakdown -->
+  <div class="section">
+    <h2 class="section-title">Posture Score Breakdown</h2>
+    <div class="score-grid">
+      <div class="score-card"><div class="card-label">Identity</div><div class="score">{{ report.posture_breakdown.identity.score }}</div><div class="subtle">{{ report.posture_breakdown.identity.label }}</div><div class="subtle">{{ report.posture_breakdown.identity.detail }}</div></div>
+      <div class="score-card"><div class="card-label">Privileged Access</div><div class="score">{{ report.posture_breakdown.privileged_access.score }}</div><div class="subtle">{{ report.posture_breakdown.privileged_access.label }}</div><div class="subtle">{{ report.posture_breakdown.privileged_access.detail }}</div></div>
+      <div class="score-card"><div class="card-label">Config</div><div class="score">{{ report.posture_breakdown.config.score }}</div><div class="subtle">{{ report.posture_breakdown.config.label }}</div><div class="subtle">{{ report.posture_breakdown.config.detail }}</div></div>
+    </div>
+  </div>
+
+  <!-- Secure Offboarding Evidence -->
+  <div class="section">
+    <h2 class="section-title">Secure Offboarding Evidence</h2>
+    {% if report.section_offboarding.empty_message %}
+    <p class="empty-note">{{ report.section_offboarding.empty_message }}</p>
+    {% else %}
+    <table>
+      <thead><tr><th>Metric</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>Secure Exits Executed</td><td>{{ report.section_offboarding.secure_exits }}</td></tr>
+        {% if report.section_offboarding.successful_offboarding_events is defined %}
+        <tr><td>Successful Offboarding Events</td><td>{{ report.section_offboarding.successful_offboarding_events }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  <!-- Evidence Integrity & Attestation -->
+  <div class="section">
+    <h2 class="section-title">Evidence Integrity &amp; Attestation</h2>
+    <div class="integrity">
+      <table>
+        <tbody>
+          <tr><th>Data Collection Timestamp</th><td>{{ report.evidence_integrity.data_collection_timestamp }}</td></tr>
+          <tr><th>Report Generation Timestamp</th><td>{{ report.evidence_integrity.report_generation_timestamp }}</td></tr>
+          <tr><th>Evidence Source</th><td>{{ report.evidence_integrity.evidence_source }}</td></tr>
+          <tr><th>Tenant Verification Status</th><td>{{ report.evidence_integrity.tenant_verification_status }}</td></tr>
+          <tr><th>Report Hash (SHA-256)</th><td style="word-break: break-all;">{{ report.evidence_integrity.report_hash }}</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:8px;">{{ report.evidence_integrity.integrity_statement }}</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>{{ report.disclaimer }}</div>
+    <div style="margin-top: 6px;">Generated {{ report.header.report_generated_at }} &#183; Identifier {{ report.header.tenant_id }}.</div>
+  </div>
+</body>
+</html>

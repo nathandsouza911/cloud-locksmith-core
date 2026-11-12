@@ -1,0 +1,571 @@
+{
+  "IDENTITY_USER_NO_MFA": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "5.2.2.1",
+      "profile": "L1",
+      "mapping_strength": "evidence",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure multifactor authentication is enabled for all users",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.3.2v2",
+      "mapping_strength": "evidence",
+      "evidence_type": "configuration_state",
+      "report_label": "MFA SHALL be enforced for all users",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "MFA-USERS",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "All users protected by multi-factor authentication",
+      "nist_csf_functions": ["PR.AA-03"]
+    }
+  ],
+  "IDENTITY_ADMIN_NO_MFA": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "5.2.2.4",
+      "profile": "L1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure multifactor authentication is enabled for all users in administrative roles",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.3.6v1",
+      "mapping_strength": "evidence",
+      "evidence_type": "configuration_state",
+      "report_label": "Phishing-resistant MFA SHALL be required for highly privileged roles",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "MFA-ADMIN",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Administrator accounts protected by multi-factor authentication",
+      "nist_csf_functions": ["PR.AA-03"]
+    }
+  ],
+  "IDENTITY_UNUSED_ACCOUNT": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "1.1.4",
+      "profile": "L1",
+      "mapping_strength": "partial",
+      "evidence_type": "inventory",
+      "report_label": "Ensure inactive/stale user accounts are reviewed and disabled",
+      "nist_csf_functions": ["PR.AA-01"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "ACCOUNT-LIFECYCLE",
+      "mapping_strength": "direct",
+      "evidence_type": "inventory",
+      "report_label": "Inactive accounts identified and disabled",
+      "nist_csf_functions": ["PR.AA-01"]
+    }
+  ],
+  "IDENTITY_ADMIN_COUNT_EXCESS": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "1.1.3",
+      "profile": "L1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure that between two and four global admins are designated",
+      "nist_csf_functions": ["PR.AA-05"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.7.1v1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "A minimum of two and a maximum of eight users SHALL be Global Administrators",
+      "nist_csf_functions": ["PR.AA-05"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "ADMIN-COUNT",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Global Administrator count limited to policy",
+      "nist_csf_functions": ["PR.AA-05"]
+    }
+  ],
+  "IDENTITY_OVERPRIVILEGED_USER": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "1.1.1",
+      "profile": "L1",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure administrative accounts use least-privilege roles",
+      "nist_csf_functions": ["PR.AA-05"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.7.2v1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Privileged users SHALL use finer-grained roles instead of Global Administrator",
+      "nist_csf_functions": ["PR.AA-05"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "PRIV-ACCESS",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Least-privilege administrative role assignment",
+      "nist_csf_functions": ["PR.AA-05"]
+    }
+  ],
+  "IDENTITY_BREAK_GLASS_ACCOUNT": [
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "EMERGENCY-ACCESS",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Two emergency access (break-glass) accounts configured",
+      "nist_csf_functions": ["PR.AA-01"]
+    }
+  ],
+  "IDENTITY_BREAK_GLASS_USAGE": [
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "EMERGENCY-ACCESS-MONITOR",
+      "mapping_strength": "evidence",
+      "evidence_type": "activity_log",
+      "report_label": "Emergency access account usage reviewed",
+      "nist_csf_functions": ["DE.CM-03"]
+    }
+  ],
+  "IDENTITY_GUEST_INVITES_OPEN": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "1.1.7",
+      "profile": "L1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure guest invitations are restricted to administrators",
+      "nist_csf_functions": ["PR.AA-05"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.8.2v1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Only users with the Guest Inviter role SHOULD be able to invite guest users",
+      "nist_csf_functions": ["PR.AA-05"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "EXTERNAL-ACCESS",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "External guest invitations restricted",
+      "nist_csf_functions": ["PR.AA-05"]
+    }
+  ],
+  "IDENTITY_USER_CONSENT_POLICY": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "5.1.5.1",
+      "profile": "L1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure user consent to apps accessing company data on their behalf is restricted",
+      "nist_csf_functions": ["PR.AA-05"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.5.2v1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Only administrators SHALL be allowed to consent to applications",
+      "nist_csf_functions": ["PR.AA-05"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "APP-CONSENT",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "End-user OAuth application consent restricted",
+      "nist_csf_functions": ["PR.PS-01"]
+    }
+  ],
+  "IDENTITY_ILLICIT_CONSENT_GRANTS": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "5.1.5.2",
+      "profile": "L2",
+      "mapping_strength": "evidence",
+      "evidence_type": "inventory",
+      "report_label": "Ensure third-party integrated applications and OAuth grants are reviewed",
+      "nist_csf_functions": ["DE.CM-03"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.5.2v1",
+      "mapping_strength": "evidence",
+      "evidence_type": "inventory",
+      "report_label": "Admin-only consent reduces illicit OAuth grants",
+      "nist_csf_functions": ["DE.CM-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "APP-CONSENT",
+      "mapping_strength": "evidence",
+      "evidence_type": "inventory",
+      "report_label": "Illicit OAuth consent grants identified and reviewed",
+      "nist_csf_functions": ["DE.CM-03"]
+    }
+  ],
+  "IDENTITY_OAUTH_APP_CONSENT_DISCOVERY": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "5.1.5.2",
+      "profile": "L2",
+      "mapping_strength": "evidence",
+      "evidence_type": "inventory",
+      "report_label": "Third-party integrated applications and OAuth grants are inventoried",
+      "nist_csf_functions": ["DE.CM-03"]
+    }
+  ],
+  "CA_MFA_ALL_USERS": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "5.2.2.6",
+      "profile": "L1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure a Conditional Access policy enforces MFA for all users",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.3.2v2",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "MFA SHALL be enforced for all users",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "MFA-USERS",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Conditional Access enforces MFA for all users",
+      "nist_csf_functions": ["PR.AA-03"]
+    }
+  ],
+  "CA_MFA_ADMINS": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "5.2.2.4",
+      "profile": "L1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure a Conditional Access policy enforces MFA for administrative roles",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.3.6v1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Phishing-resistant MFA SHALL be required for highly privileged roles",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "MFA-ADMIN",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Conditional Access enforces MFA for administrators",
+      "nist_csf_functions": ["PR.AA-03"]
+    }
+  ],
+  "CA_LEGACY_AUTH_BLOCK": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "5.2.2.10",
+      "profile": "L1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure legacy authentication is blocked via Conditional Access",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.1.1v1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Legacy authentication SHALL be blocked",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "LEGACY-AUTH",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Legacy authentication protocols blocked",
+      "nist_csf_functions": ["PR.PS-01"]
+    }
+  ],
+  "CA_DEVICE_CODE_FLOW_BLOCK": [
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.3.9v1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Device code authentication SHOULD be blocked",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "LEGACY-AUTH",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "Device code authentication flow blocked",
+      "nist_csf_functions": ["PR.PS-01"]
+    }
+  ],
+  "CA_AUTHENTICATION_TRANSFER_BLOCK": [
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "AUTH-HARDENING",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "Authentication transfer sign-in flow blocked",
+      "nist_csf_functions": ["PR.PS-01"]
+    }
+  ],
+  "CA_GUEST_MFA": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "5.2.2.7",
+      "profile": "L1",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure MFA is required for guest and external users",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.3.2v2",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "MFA SHALL be enforced for all users (including guests)",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "EXTERNAL-ACCESS",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "Guest and external users required to use MFA",
+      "nist_csf_functions": ["PR.AA-03"]
+    }
+  ],
+  "CA_BREAK_GLASS_EXCLUSION": [
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "EMERGENCY-ACCESS",
+      "mapping_strength": "evidence",
+      "evidence_type": "configuration_state",
+      "report_label": "Break-glass accounts excluded from Conditional Access policies",
+      "nist_csf_functions": ["PR.AA-01"]
+    }
+  ],
+  "IDENTITY_PASSWORD_NEVER_EXPIRES": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "1.1.4",
+      "profile": "L1",
+      "mapping_strength": "evidence",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure that password expiration is not set to Never for user accounts",
+      "nist_csf_functions": ["PR.AA-01"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "CRED-HYGIENE",
+      "mapping_strength": "evidence",
+      "evidence_type": "configuration_state",
+      "report_label": "No user accounts with password set to never expire",
+      "nist_csf_functions": ["PR.AA-01"]
+    }
+  ],
+  "IDENTITY_APP_SECRET_EXPIRING_SOON": [
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "CRED-HYGIENE",
+      "mapping_strength": "evidence",
+      "evidence_type": "configuration_state",
+      "report_label": "App registration credentials not expiring within 90 days",
+      "nist_csf_functions": ["PR.AA-01"]
+    },
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "2.1.1",
+      "profile": "L1",
+      "mapping_strength": "evidence",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure app registration secrets are rotated before expiry",
+      "nist_csf_functions": ["PR.AA-01"]
+    }
+  ],
+  "IDENTITY_STALE_SERVICE_PRINCIPAL": [
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "1.1.4",
+      "profile": "L1",
+      "mapping_strength": "partial",
+      "evidence_type": "inventory",
+      "report_label": "Ensure inactive/stale service principals are reviewed and disabled",
+      "nist_csf_functions": ["PR.AA-01"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "ACCOUNT-LIFECYCLE",
+      "mapping_strength": "direct",
+      "evidence_type": "inventory",
+      "report_label": "Stale service principals identified and disabled",
+      "nist_csf_functions": ["PR.AA-01"]
+    }
+  ],
+  "IDENTITY_SERVICE_ACCOUNT_INTERACTIVE_LOGIN": [
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "PRIV-ACCESS",
+      "mapping_strength": "evidence",
+      "evidence_type": "activity_log",
+      "report_label": "Service accounts not performing interactive sign-ins",
+      "nist_csf_functions": ["DE.CM-03"]
+    },
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.7.2v1",
+      "mapping_strength": "partial",
+      "evidence_type": "activity_log",
+      "report_label": "Service accounts should not use interactive authentication",
+      "nist_csf_functions": ["PR.AA-05"]
+    }
+  ],
+  "IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA": [
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.3.3v1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Phishing-resistant MFA SHALL be used for privileged users",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "5.2.2.4",
+      "profile": "L2",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure phishing-resistant MFA is used for administrator accounts",
+      "nist_csf_functions": ["PR.AA-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "MFA-PHISH-RESISTANT",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Privileged admins protected by phishing-resistant MFA",
+      "nist_csf_functions": ["PR.AA-03"]
+    }
+  ],
+  "IDENTITY_PERMANENT_ROLE_ASSIGNMENT": [
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.7.4v1",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Privileged roles SHALL be assigned via PIM (just-in-time)",
+      "nist_csf_functions": ["PR.AA-05"]
+    },
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "1.3.1",
+      "profile": "L2",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure administrative accounts are just-in-time provisioned",
+      "nist_csf_functions": ["PR.AA-05"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "JIT-PRIV-ACCESS",
+      "mapping_strength": "direct",
+      "evidence_type": "inventory",
+      "report_label": "Privileged role assignments use PIM just-in-time access",
+      "nist_csf_functions": ["PR.AA-05"]
+    }
+  ],
+  "CA_HIGH_RISK_SIGN_IN_BLOCK": [
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.7.4v1",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "Highly privileged accounts SHALL be blocked when a high risk level is detected",
+      "nist_csf_functions": ["PR.AA-03", "DE.CM-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "ADAPTIVE-ACCESS",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "High-risk sign-ins blocked via Identity Protection Conditional Access policy",
+      "nist_csf_functions": ["PR.AA-03"]
+    }
+  ],
+  "CA_RISK_BASED_STEP_UP_MFA": [
+    {
+      "framework_id": "cisa-scuba",
+      "reference_id": "MS.AAD.7.3v1",
+      "mapping_strength": "partial",
+      "evidence_type": "configuration_state",
+      "report_label": "MFA SHALL be required when a medium or high risk level is detected",
+      "nist_csf_functions": ["PR.AA-03", "DE.CM-03"]
+    },
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "ADAPTIVE-ACCESS",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "Step-up MFA required for medium and high-risk sign-ins",
+      "nist_csf_functions": ["PR.AA-03", "DE.CM-03"]
+    }
+  ],
+  "IDENTITY_MAIL_FORWARDING_RULE": [
+    {
+      "framework_id": "cyber-insurance",
+      "reference_id": "BEC-EXFIL",
+      "mapping_strength": "direct",
+      "evidence_type": "configuration_state",
+      "report_label": "No inbox rules auto-forwarding mail to an external address",
+      "nist_csf_functions": ["DE.CM-03"]
+    },
+    {
+      "framework_id": "cis-m365",
+      "reference_id": "6.2.1",
+      "profile": "L1",
+      "mapping_strength": "evidence",
+      "evidence_type": "configuration_state",
+      "report_label": "Ensure mailbox auto-forwarding to external domains is disabled",
+      "nist_csf_functions": ["DE.CM-03"]
+    }
+  ]
+}

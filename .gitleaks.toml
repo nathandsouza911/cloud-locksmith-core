@@ -1,0 +1,8 @@
+# gitleaks configuration: the default rules, plus an allowlist for values that are
+# public by design (the demo-only encryption key, base64 of "demo-mode-only-not-a-secret-key!").
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public demo-only placeholder values"
+regexes = ['''ZGVtby1tb2RlLW9ubHktbm90LWEtc2VjcmV0LWtleSE=''']
