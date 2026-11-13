@@ -79,8 +79,8 @@ Demo mode must never become a way into a real tenant. Each of these is covered b
 ## Out of scope / known limits
 
 * Hosting hardening (TLS termination, secrets storage, backups) is the operator's job.
-* The scheduler runs inside the API process and is on by default; see
-  `architecture.md`.
+* When enabled (`ENABLE_SCHEDULER=true`; off by default), the scheduler runs inside the
+  API process; see `architecture.md`.
 * Model and database differ in 21 places (the database is the stricter side, for
   example a unique owner index and a foreign key the models do not declare). Tests that
   use SQLite `create_all` therefore do not exercise those database constraints; the

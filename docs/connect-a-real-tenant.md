@@ -36,8 +36,8 @@ ENABLE_SCHEDULER=false
 ENABLE_AUTO_REMEDIATION=false
 ```
 
-The scheduler defaults to on in the code. With both off, nothing runs in the
-background; scans still run when you sign in.
+Both are off by default. With both off, nothing runs in the background; scans still run
+when you sign in.
 
 ## 3. Start the backend
 
