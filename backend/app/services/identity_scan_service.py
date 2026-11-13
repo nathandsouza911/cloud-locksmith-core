@@ -33,7 +33,7 @@ from app.services.graph_ca_service import (
     fetch_conditional_access_policies,
     build_ca_group_member_map,
 )
-from app.services.graph_client import graph_get, graph_get_all
+from app.services.graph_client import graph_get, graph_get_all, graph_get_with_token
 from app.services.detection.password_never_expires_detector import evaluate_password_never_expires
 from app.services.detection.app_secret_expiry_detector import evaluate_all_app_secret_expiry
 from app.services.detection.stale_service_principal_detector import evaluate_stale_service_principals
@@ -257,6 +257,62 @@ def _build_user_context(users: list[dict], role_map: dict[str, list[dict[str, st
     return user_context
 
 
+# Mail-forwarding scan limits. Graph hangs on users without an Exchange mailbox; one
+# at a time with the 20 s HTTP timeout, 14 users took ~8 minutes in the sign-in scan
+# (live run 2026-11-13, L1).
+MAIL_RULES_CONCURRENCY = 5
+MAIL_RULES_TIMEOUT_SECONDS = 10
+
+
+async def _get_all_with_token(access_token: str, path: str, tenant_id: str) -> list[dict]:
+    results: list[dict] = []
+    next_path: str | None = path
+    while next_path:
+        page = await graph_get_with_token(access_token, next_path, expected_tenant_id=tenant_id)
+        results.extend(page.get("value", []))
+        next_path = page.get("@odata.nextLink")
+    return results
+
+
+async def _fetch_inbox_rules(*, db, tenant, users: list[dict]) -> tuple[dict[str, list[dict]], list[str]]:
+    """Inbox rules per user, fetched concurrently with a per-user time limit.
+
+    Returns (rules by user id, ids of users whose rules could not be read). Users
+    with no mail address have no mailbox and are not queried. The token is read once
+    up front, so the concurrent requests never use the (async) database session; the
+    token is still checked against this tenant on every request.
+    """
+    candidates = [user for user in users if user.get("id") and user.get("mail")]
+    if not candidates:
+        return {}, []
+    access_token = await get_valid_access_token(tenant.id, db=db)
+    semaphore = asyncio.Semaphore(MAIL_RULES_CONCURRENCY)
+
+    async def fetch(user: dict) -> tuple[str, list[dict] | None]:
+        user_id = user["id"]
+        path = f"/users/{user_id}/mailFolders/inbox/messageRules"
+        async with semaphore:
+            try:
+                rules = await asyncio.wait_for(
+                    _get_all_with_token(access_token, path, tenant.id),
+                    MAIL_RULES_TIMEOUT_SECONDS,
+                )
+                return user_id, rules
+            except Exception as exc:  # noqa: BLE001 - one mailbox must not stop the scan
+                logger.warning(
+                    "mail_forwarding_rule_fetch_failed tenant_id=%s user_id=%s error=%s",
+                    tenant.id,
+                    user_id,
+                    type(exc).__name__,
+                )
+                return user_id, None
+
+    fetched = await asyncio.gather(*(fetch(user) for user in candidates))
+    rules_by_user = {user_id: rules for user_id, rules in fetched if rules is not None}
+    unavailable = [user_id for user_id, rules in fetched if rules is None]
+    return rules_by_user, unavailable
+
+
 async def run_user_controls(
     db: AsyncSession,
     tenant,
@@ -330,17 +386,12 @@ async def run_user_controls(
             if "@" in (user.get("userPrincipalName") or "")
         }
         forwarding_findings = 0
+        rules_by_user, rules_unavailable = await _fetch_inbox_rules(db=db, tenant=tenant, users=standard_users)
         for user in standard_users:
             user_id = user.get("id")
-            try:
-                rules = await graph_get_all(db, tenant, f"/users/{user_id}/mailFolders/inbox/messageRules")
-            except Exception:
-                logger.exception(
-                    "mail_forwarding_rule_fetch_failed tenant_id=%s user_id=%s — skipping user",
-                    tenant_id,
-                    user_id,
-                )
-                continue
+            if user_id not in rules_by_user:
+                continue  # no mailbox, or rules could not be read (logged)
+            rules = rules_by_user[user_id]
             result = evaluate_user_forwarding_rules(user, rules, tenant_domains)
             if result is None:
                 await _safe_upsert_control_result(
@@ -376,9 +427,13 @@ async def run_user_controls(
             resource_type="TENANT",
         )
         logger.info(
-            "identity_scan_service_mail_forwarding_summary tenant_id=%s forwarding_findings=%s",
+            "identity_scan_service_mail_forwarding_summary tenant_id=%s forwarding_findings=%s "
+            "evaluated=%s unavailable=%s without_mailbox=%s",
             tenant_id,
             forwarding_findings,
+            len(rules_by_user),
+            len(rules_unavailable),
+            sum(1 for user in standard_users if not user.get("mail")),
         )
 
     user_map = {u["id"]: u for u in standard_users}
