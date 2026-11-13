@@ -18,6 +18,11 @@
   `enabledForReportingButNotEnforced`. The code sent `reportOnly`, which Graph rejects, so
   the licence check that runs before every Conditional Access fix failed and no
   Conditional Access fix could run; scans also missed existing report-only MFA policies.
+* The Conditional Access licence check (it creates and immediately deletes a temporary
+  report-only policy) now sends `clientAppTypes: ["all"]`; Graph rejected the empty list,
+  and every Conditional Access fix was refused as "no licence". The check now runs only
+  after the break-glass checks, and no longer runs before approval and preflight checks,
+  so a fix that would be refused never writes to the tenant. Found in a live run.
 
 ## 0.1.0 (2026-11-12)
 
