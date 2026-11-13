@@ -119,6 +119,11 @@ class ControlEngineError(RuntimeError):
     pass
 
 
+class RollbackIncompleteError(ControlEngineError):
+    """A rollback failed after it started changing the tenant: some policies may be
+    restored and others not. Retrying the rollback converges to the snapshot."""
+
+
 @asynccontextmanager
 async def _tenant_ca_mutation_lock(db, tenant_id: str):
     has_connection = callable(getattr(db, "connection", None))
@@ -1380,7 +1385,7 @@ async def rollback_control(
             managed_policy_ids=_normalize_managed_policy_ids([*current_managed_policy_ids, *restored_policy_ids]),
             error_message=str(exc),
         )
-        raise ControlEngineError(f"Rollback failed for {normalized_control_id}: {exc}") from exc
+        raise RollbackIncompleteError(f"Rollback failed for {normalized_control_id}: {exc}") from exc
     except Exception as exc:
         state = await create_or_update_control_state(
             db,
@@ -1402,7 +1407,7 @@ async def rollback_control(
             managed_policy_ids=_normalize_managed_policy_ids([*current_managed_policy_ids, *restored_policy_ids]),
             error_message=str(exc),
         )
-        raise ControlEngineError(f"Rollback failed for {normalized_control_id}: {exc}") from exc
+        raise RollbackIncompleteError(f"Rollback failed for {normalized_control_id}: {exc}") from exc
 
     state = await get_control_state(db, tenant.id, normalized_control_id)
     if state is None:

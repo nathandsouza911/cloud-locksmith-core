@@ -17,7 +17,12 @@ from app.services.remediation.lifecycle import (
 )
 from app.services.posture_snapshot_service import create_posture_snapshot
 from app.services.remediation.finding_lock import FindingBusyError, lock_finding_nowait
-from app.services.ca_policy_engine import normalize_control_id, rollback_control_dispatch
+from app.services.ca_policy_engine import (
+    ControlEngineError,
+    RollbackIncompleteError,
+    normalize_control_id,
+    rollback_control_dispatch,
+)
 from app.services.remediation.admin_roles.admin_role_rollback import rollback_admin_roles
 from app.services.remediation.control_registry import CONTROL_REGISTRY, get_control_capabilities
 from app.services.remediation_executor import RemediationGraphClient
@@ -224,6 +229,50 @@ async def rollback_remediation(
     except DormantAccountRollbackError as exc:
         # Domain-specific user-facing validation error — message is curated.
         raise HTTPException(status_code=400, detail=str(exc))
+
+    except RollbackIncompleteError:
+        # The rollback changed part of the tenant and then failed (e.g. Graph
+        # throttling). Say so plainly, record it, and leave the finding as it is so
+        # the rollback can be retried; a retry restores the snapshot.
+        logger.exception(
+            "rollback_incomplete compliance_result_id=%s control_id=%s",
+            compliance_result_id,
+            compliance.control_id,
+        )
+        db.rollback()
+        db.add(
+            RemediationAuditLog(
+                tenant_id=current_tenant.id,
+                compliance_result_id=compliance.id,
+                control_id=compliance.control_id,
+                resource_type=compliance.resource_type,
+                resource_id=compliance.resource_id,
+                decision="ROLLBACK_FAILED",
+                confidence=0.0,
+                explanation_summary="Rollback did not finish",
+                explanation_factors={"reason": reason, "requested_by": requested_by},
+                explanation_risk_note="The tenant may be partly restored until the rollback is retried",
+                rolled_back=False,
+            )
+        )
+        db.commit()
+        return JSONResponse(
+            status_code=502,
+            content={
+                "status": "failed",
+                "reason": "rollback_incomplete",
+                "message": (
+                    "The rollback did not finish: Microsoft Graph failed partway, so some "
+                    "Conditional Access changes may be undone and others not. Retry the "
+                    "rollback to finish restoring the previous state."
+                ),
+            },
+        )
+
+    except ControlEngineError as exc:
+        # Refused before any change (no break-glass account, no snapshot, ...): the
+        # engine's messages are fixed strings about this tenant's own setup.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     except Exception:
         # Never echo raw exception text or type names to the client; those
