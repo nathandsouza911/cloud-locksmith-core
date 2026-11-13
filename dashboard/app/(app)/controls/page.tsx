@@ -23,13 +23,7 @@ import {
 } from "@/lib/control-status";
 import { useComplianceResults, useControlCapabilities } from "@/lib/api/hooks";
 import { useAuth } from "@/lib/auth-context";
-import type {
-  ComplianceResult,
-  ControlApplyResponse,
-  ControlCapabilityDecision,
-  ControlStateResponse,
-  Severity,
-} from "@/types";
+import type { ComplianceResult, ControlCapabilityDecision, ControlStateResponse, Severity } from "@/types";
 
 interface ControlDefinition {
   controlId: string;
@@ -172,7 +166,7 @@ function deriveControlStatus(
   return "NOT_CONFIGURED";
 }
 
-function actionLabelForResult(result: ControlApplyResponse | null | undefined): string | null {
+function actionLabelForResult(result: { status: string; reason?: string } | null | undefined): string | null {
   if (!result) return null;
   if (result.status === "success" || result.status === "no-op") return "Applied and Verified";
   if (result.status === "partial") return "Partial - needs review";
@@ -260,7 +254,8 @@ export default function ControlsPage() {
           return {
             ...definition,
             status,
-            finding: undefined as ComplianceResult | undefined,
+            // The CA fix runs through the approval workflow on this finding.
+            finding: deriveNonCaStatus(definition.controlId, complianceResults).finding,
             actionState,
             capability,
             buttonState,
@@ -309,20 +304,6 @@ export default function ControlsPage() {
     }));
 
     try {
-      if (isCaControl(controlId)) {
-        const response = await ep.applyControl(controlId, "enforced");
-        const nextLabel = actionLabelForResult(response) ?? "Applied and Verified";
-
-        setActionStateByControl((current) => ({
-          ...current,
-          [controlId]: { loading: false, label: nextLabel },
-        }));
-
-        await refreshControl(controlId);
-        complianceQuery.refetch();
-        return;
-      }
-
       if (capability?.mode === "blocked") {
         throw new Error(capability.notes || "This action is not available for this tenant.");
       }
@@ -340,16 +321,24 @@ export default function ControlsPage() {
 
       const grantsBefore = controlId === "IDENTITY_ILLICIT_CONSENT_GRANTS" ? illicitGrantCount(finding) : 0;
 
-      if (capability?.mode === "manual") {
+      // Conditional Access fixes always need an approval record: the backend refuses to
+      // execute them otherwise, and the approval starts the 48 h expiry.
+      if (capability?.mode === "manual" || isCaControl(controlId)) {
         await ep.approveByResult(finding.id, tenantId);
       }
 
-      await ep.executeRemediation(finding.id);
+      const result = await ep.executeRemediation(finding.id);
+
+      if (isCaControl(controlId)) {
+        await refreshControl(controlId);
+      }
 
       const successLabel =
         controlId === "IDENTITY_ILLICIT_CONSENT_GRANTS"
           ? `Removed ${grantsBefore} risky app permission${grantsBefore === 1 ? "" : "s"}`
-          : "Applied and Verified";
+          : isCaControl(controlId)
+            ? (actionLabelForResult(result) ?? "Applied and Verified")
+            : "Applied and Verified";
 
       setActionStateByControl((current) => ({
         ...current,

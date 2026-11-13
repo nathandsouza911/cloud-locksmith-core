@@ -35,7 +35,6 @@ import type {
   LicenseFindingsResponse,
   LicenseScanResponse,
   LicenseSummary,
-  ControlApplyResponse,
   ControlCapabilityMap,
   ControlStateResponse,
   SupportTicket,
@@ -238,12 +237,6 @@ export const getControlCapabilities = async (): Promise<ControlCapabilityMap> =>
     ? (response as ControlCapabilityMap)
     : {};
 };
-
-export const applyControl = (controlId: string, mode: "audit" | "enforced" = "enforced") =>
-  api.post<ControlApplyResponse>("/api/v1/control/apply", {
-    control_id: controlId,
-    mode,
-  });
 
 export const getRemediationStatsWindow = (window: "24h" | "7d" | "30d" | "custom", start?: string) => {
   const qs = start ? `?window=${window}&start=${start}` : `?window=${window}`;

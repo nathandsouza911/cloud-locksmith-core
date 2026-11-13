@@ -46,6 +46,17 @@ async def apply_control_endpoint(
     current_tenant: Tenant = Depends(get_current_tenant_with_fresh_auth),
     _write: None = Depends(require_write_access),
 ):
+    # This route calls the CA engine directly: no approval, approval expiry or
+    # preflight. It may create report-only policies only; enforcing goes through the
+    # remediation workflow (approve -> preflight -> execute).
+    if str(payload.mode or "").strip().lower() == "enforced":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Enforced Conditional Access changes must go through the remediation workflow "
+                "(approve, preflight, execute). This endpoint applies report-only policies only."
+            ),
+        )
     try:
         return await apply_control_dispatch(
             db=db,
