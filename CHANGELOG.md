@@ -23,6 +23,18 @@
   and every Conditional Access fix was refused as "no licence". The check now runs only
   after the break-glass checks, and no longer runs before approval and preflight checks,
   so a fix that would be refused never writes to the tenant. Found in a live run.
+* **Security fix.** "Review & Fix" on a Conditional Access card in Security Controls
+  applied the policy in enforced mode directly, with no approval, approval expiry or
+  preflight check. It now goes through the same approve, preflight and execute workflow
+  as the Risk Feed, and `POST /api/v1/control/apply` refuses `mode: "enforced"`.
+* Conditional Access fixes through the approval workflow failed with "Another
+  Conditional Access mutation is already running", and could leave the tenant lock held.
+  The lock is now held on its own database connection and is re-entrant within a request.
+* Conditional Access verification now compares with the policy as Graph returns it
+  (Graph adds empty fields), so correct policies are no longer reported as failed.
+  Report-only fixes are verified as "report-only" and leave the finding open.
+* A Conditional Access fix whose verification failed can now be rolled back, and rolling
+  back a Conditional Access fix from the dashboard works (it always failed before).
 
 ## 0.1.0 (2026-11-12)
 
