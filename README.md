@@ -5,7 +5,7 @@ Access misconfigurations, scores the tenant's posture, and fixes findings throug
 approval-gated workflow with verification and rollback. It is multi-tenant, so an MSP can
 run it across client tenants.
 
-Status: **0.1.0**, first open-source release. AGPL-3.0.
+Status: **0.1.1**. AGPL-3.0. See `CHANGELOG.md` for what changed since the first open-source release (0.1.0).
 
 ## Try the demo (no Microsoft account needed)
 

@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 (2026-11-13)
+
+Fixes from the roadmap's first phase and from a supervised live run against a developer
+tenant (`docs/connect-a-real-tenant.md` lists what was run).
 
 * The scheduler is now off by default (`ENABLE_SCHEDULER=false`). The demo and the
   documented `.env.example` already turned it off, so they behave as before; any other
