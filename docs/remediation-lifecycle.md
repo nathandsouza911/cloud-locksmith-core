@@ -53,7 +53,7 @@ Access policy or the removed role assignments). Rollback is also audited.
 ## Automatic remediation (off by default)
 
 The scheduler's auto-remediation job runs only when **both** `ENABLE_SCHEDULER=true`
-(the default) **and** `ENABLE_AUTO_REMEDIATION=true` (default false). Even then it only
+(default false) **and** `ENABLE_AUTO_REMEDIATION=true` (default false). Even then it only
 considers the controls in `AUTO_REMEDIATION_CONTROLS`
 (`IDENTITY_OVERPRIVILEGED_USER`, `IDENTITY_UNUSED_ACCOUNT`, `IDENTITY_USER_CONSENT_POLICY`),
 and skips a finding when:
