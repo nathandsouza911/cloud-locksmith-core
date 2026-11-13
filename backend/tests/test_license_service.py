@@ -139,15 +139,6 @@ def test_execute_approved_remediation_blocks_without_required_license(monkeypatc
         fake_get_tenant_license,
     )
 
-    # CA controls first pass a Graph write-probe gate; let it through so the P1 check is reached.
-    async def no_ca_block(*args, **kwargs):
-        return None
-
-    monkeypatch.setattr(
-        "app.services.remediation_execution_service.check_ca_license_gate",
-        no_ca_block,
-    )
-
     with pytest.raises(ValueError, match="Azure AD Premium P1 required"):
         asyncio.run(
             execute_approved_remediation(

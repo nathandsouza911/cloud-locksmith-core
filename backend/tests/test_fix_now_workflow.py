@@ -124,7 +124,6 @@ def test_auto_approve_true_calls_mark_remediation_approved_when_pending():
         patch.object(svc, "mark_remediation_approved", side_effect=_fake_mark_approved),
         patch.object(svc, "execute_remediation", new=AsyncMock(return_value={"status": "success", "verified": True})),
         patch.object(svc, "create_posture_snapshot"),
-        patch.object(svc, "check_ca_license_gate", new=AsyncMock(return_value=None)),
         patch.object(svc, "protected_target_result", return_value=None),
         patch.object(svc, "has_delegated_oauth_token_sync", return_value=True),
         patch.object(svc, "increment"),
@@ -169,7 +168,6 @@ def test_auto_approve_false_does_not_call_mark_approved_for_pending():
 
     with (
         patch.object(svc, "mark_remediation_approved", side_effect=_fake_mark_approved),
-        patch.object(svc, "check_ca_license_gate", new=AsyncMock(return_value=None)),
         patch.object(svc, "protected_target_result", return_value=None),
     ):
         with pytest.raises(ValueError, match="approved before execution"):
@@ -211,7 +209,6 @@ def test_auto_approve_is_skipped_when_finding_already_approved():
         patch.object(svc, "mark_remediation_approved", side_effect=_fake_mark_approved),
         patch.object(svc, "execute_remediation", new=AsyncMock(return_value={"status": "success", "verified": True})),
         patch.object(svc, "create_posture_snapshot"),
-        patch.object(svc, "check_ca_license_gate", new=AsyncMock(return_value=None)),
         patch.object(svc, "protected_target_result", return_value=None),
         patch.object(svc, "has_delegated_oauth_token_sync", return_value=True),
         patch.object(svc, "increment"),
@@ -269,7 +266,6 @@ def test_passing_finding_is_rejected_before_execution():
     db = _make_db(finding)
 
     with (
-        patch.object(svc, "check_ca_license_gate", new=AsyncMock(return_value=None)),
         patch.object(svc, "protected_target_result", return_value=None),
     ):
         result = asyncio.run(

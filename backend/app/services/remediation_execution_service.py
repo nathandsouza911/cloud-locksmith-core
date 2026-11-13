@@ -19,7 +19,7 @@ from app.services.graph_client import (
     describe_graph_api_error,
     graph_error_ui_label,
 )
-from app.services.remediation_executor import RemediationGraphClient, execute_remediation
+from app.services.remediation_executor import execute_remediation
 from app.services.remediation.approval_binding import (
     ApprovalScopeError,
     assert_execution_within_approved_scope,
@@ -47,7 +47,6 @@ from app.services.license_service import (
     get_tenant_license,
     required_license_tier,
 )
-from app.services.license_check_service import check_ca_license_gate
 from app.services.posture_snapshot_service import create_posture_snapshot
 from app.services.microsoft_oauth_scopes import REQUIRED_AUTHORIZATION_POLICY_SCOPE
 from app.db.models.remediation_audit import RemediationAuditLog
@@ -123,13 +122,6 @@ async def execute_approved_remediation(
 
     if not compliance:
         raise ValueError("Compliance result not found")
-
-    ca_blocked = await check_ca_license_gate(
-        RemediationGraphClient(db=db, tenant=tenant),
-        compliance.control_id,
-    )
-    if ca_blocked is not None:
-        return ca_blocked
 
     if compliance.passed:
         return {"status": "already_compliant", "reason": "Finding is already compliant - no remediation required"}

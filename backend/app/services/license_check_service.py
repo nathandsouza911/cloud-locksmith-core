@@ -43,7 +43,8 @@ async def check_conditional_access_license(graph_client) -> bool:
                 "includeApplications": ["All"],
                 "excludeApplications": [],
             },
-            "clientAppTypes": [],
+            # Graph rejects [] (error 1064); "all" targets every client app.
+            "clientAppTypes": ["all"],
         },
         "grantControls": {
             "operator": "OR",
@@ -99,33 +100,3 @@ async def check_ca_license_from_skus(graph_client) -> bool:
     except Exception:
         logger.exception("[CALicense] SKU-based license check failed — defaulting to True")
         return True  # Fail open: let the authoritative probe handle actual blocking
-
-
-CA_CONTROL_TYPES: frozenset[str] = frozenset(
-    {
-        "CA_MFA_ALL_USERS",
-        "CA_MFA_ADMINS",
-        "CA_GUEST_MFA",
-        "CA_LEGACY_AUTH_BLOCK",
-        "CA_DEVICE_CODE_FLOW_BLOCK",
-        "CA_AUTHENTICATION_TRANSFER_BLOCK",
-        "CA_BREAK_GLASS_EXCLUSION",
-    }
-)
-
-
-async def check_ca_license_gate(graph_client, control_id: str) -> dict | None:
-    """
-    Returns blocked payload if control is a CA type and the tenant lacks license.
-    Returns None if allowed to proceed.
-    Never raises — fails closed on any probe error to prevent 500s.
-    """
-    if control_id not in CA_CONTROL_TYPES:
-        return None
-    try:
-        licensed = await check_conditional_access_license(graph_client)
-    except Exception:
-        licensed = False
-    if not licensed:
-        return {"status": "blocked", "reason": "NO_CA_LICENSE"}
-    return None

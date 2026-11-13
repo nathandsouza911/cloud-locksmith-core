@@ -863,6 +863,11 @@ async def apply_control(
     from app.services.remediation_executor import RemediationGraphClient
 
     graph_client = RemediationGraphClient(db=db, tenant=tenant)
+    # Read-only safety checks first: the licence probe below writes to the tenant.
+    break_glass_ids = list_break_glass_user_ids(db=db, tenant_id=tenant.id)
+    if not break_glass_ids:
+        raise ControlEngineError("Break-glass accounts are required before applying CLX Conditional Access policies")
+    await _validate_break_glass_accounts(graph_client, break_glass_ids)
     if not await check_conditional_access_license(graph_client):
         execution = _record_control_execution(
             db=db,
@@ -884,10 +889,6 @@ async def apply_control(
             "control_id": normalized_control_id,
             "execution_id": str(execution.id),
         }
-    break_glass_ids = list_break_glass_user_ids(db=db, tenant_id=tenant.id)
-    if not break_glass_ids:
-        raise ControlEngineError("Break-glass accounts are required before applying CLX Conditional Access policies")
-    await _validate_break_glass_accounts(graph_client, break_glass_ids)
 
     current_state = await get_control_state(db, tenant.id, normalized_control_id)
     current_managed_policy_ids = _managed_policy_ids_from_state(current_state)
@@ -1459,6 +1460,11 @@ async def apply_break_glass_exclusion(
     from app.services.remediation_executor import RemediationGraphClient
 
     graph_client = RemediationGraphClient(db=db, tenant=tenant)
+    # Read-only safety checks first: the licence probe below writes to the tenant.
+    break_glass_ids = list_break_glass_user_ids(db=db, tenant_id=tenant.id)
+    if not break_glass_ids:
+        raise ControlEngineError("Break-glass accounts are required before applying CA_BREAK_GLASS_EXCLUSION")
+    await _validate_break_glass_accounts(graph_client, break_glass_ids)
     if not await check_conditional_access_license(graph_client):
         execution = _record_control_execution(
             db=db,
@@ -1478,11 +1484,6 @@ async def apply_break_glass_exclusion(
             "control_id": CONTROL_BREAK_GLASS_EXCLUSION,
             "execution_id": str(execution.id),
         }
-
-    break_glass_ids = list_break_glass_user_ids(db=db, tenant_id=tenant.id)
-    if not break_glass_ids:
-        raise ControlEngineError("Break-glass accounts are required before applying CA_BREAK_GLASS_EXCLUSION")
-    await _validate_break_glass_accounts(graph_client, break_glass_ids)
 
     all_policies = await graph_client.list_conditional_access_policies()
     diffs: list[dict] = []
