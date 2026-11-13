@@ -864,12 +864,15 @@ def test_apply_control_fails_closed_when_tenant_ca_lock_is_held():
             raise AssertionError("Expected ControlEngineError when CA lock is held")
 
 
-def test_rollback_control_rejects_partial_execution():
+def test_rollback_control_rejects_failed_execution():
+    # A PARTIAL execution (applied, verification failed) may be rolled back from its
+    # snapshot (B2, live run 2026-11-13; see test_ca_rollback_after_failed_verify).
+    # A FAILED one applied nothing, so there is nothing to undo.
     execution = SimpleNamespace(
         id=uuid.uuid4(),
         tenant_id="tenant-1",
         control_id=CONTROL_MFA_ADMINS,
-        status="partial",
+        status="failed",
         snapshot_id=uuid.uuid4(),
     )
     tenant = SimpleNamespace(id="tenant-1")
@@ -885,6 +888,6 @@ def test_rollback_control_rejects_partial_execution():
                 )
             )
         except ControlEngineError as exc:
-            assert "failed/partial execution" in str(exc)
+            assert "nothing was applied" in str(exc)
         else:
-            raise AssertionError("Expected ControlEngineError for partial execution rollback")
+            raise AssertionError("Expected ControlEngineError for failed execution rollback")

@@ -111,6 +111,9 @@ class CAMFAPolicyExecutor:
         return {
             "status": "SUCCESS",
             "verified": result.get("verified", True),
+            # "report_only": the policy exists as intended but protects no one, so the
+            # finding must stay open (see execute_approved_remediation).
+            "verification_scope": result.get("verification_scope"),
             "control_id": self._control_id,
             "snapshot": {
                 "control_id": self._control_id,

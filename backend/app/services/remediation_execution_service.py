@@ -583,12 +583,22 @@ async def execute_approved_remediation(
 
         compliance.last_remediated_at = to_naive_utc(utc_now())
         compliance.remediation_count_7d = (compliance.remediation_count_7d or 0) + 1
-        compliance.passed = True
-        compliance.exposure_status = ExposureStatus.RESOLVED.value
-        compliance.resolved_at = to_naive_utc(utc_now())
-        compliance.resolved_by = normalize_resolution_source(ResolutionSource.SYSTEM)
+        # A report-only Conditional Access policy is verified to exist as intended, but
+        # it enforces nothing: the finding stays open and keeps counting in the score.
+        report_only = isinstance(execution_result, dict) and execution_result.get("verification_scope") == "report_only"
+        if not report_only:
+            compliance.passed = True
+            compliance.exposure_status = ExposureStatus.RESOLVED.value
+            compliance.resolved_at = to_naive_utc(utc_now())
+            compliance.resolved_by = normalize_resolution_source(ResolutionSource.SYSTEM)
         evidence = dict(compliance.evidence or {})
         evidence.pop("last_execution_error", None)
+        if report_only:
+            evidence["report_only_policy_applied"] = True
+            evidence["report_only_verified_at"] = utc_now().isoformat()
+        else:
+            evidence.pop("report_only_policy_applied", None)
+            evidence.pop("report_only_verified_at", None)
         if isinstance(execution_result, dict):
             warning_flag = execution_result.get("warning_flag")
             warnings = execution_result.get("warnings")

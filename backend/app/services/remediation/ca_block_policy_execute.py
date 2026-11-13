@@ -73,6 +73,7 @@ class CABlockPolicyExecutor:
         return {
             "status": "SUCCESS",
             "verified": result.get("verified", True),
+            "verification_scope": result.get("verification_scope"),
             "control_id": self._control_id,
             "snapshot": {
                 "control_id": self._control_id,

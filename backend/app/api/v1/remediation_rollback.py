@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies.current_user import get_current_tenant_with_fresh_auth, require_write_access
 from app.db.models.compliance_result import ComplianceResult, ExposureStatus
+from app.db.models.control_execution import ControlExecution, ControlExecutionStatus
 from app.db.models.remediation_snapshot import RemediationSnapshot
 from app.db.models.remediation_audit import RemediationAuditLog
 from app.db.models.tenant import Tenant
@@ -15,7 +16,7 @@ from app.services.remediation.lifecycle import (
     reconcile_rolled_back_state,
 )
 from app.services.posture_snapshot_service import create_posture_snapshot
-from app.services.ca_policy_engine import rollback_control_dispatch
+from app.services.ca_policy_engine import normalize_control_id, rollback_control_dispatch
 from app.services.remediation.admin_roles.admin_role_rollback import rollback_admin_roles
 from app.services.remediation.control_registry import CONTROL_REGISTRY, get_control_capabilities
 from app.services.remediation_executor import RemediationGraphClient
@@ -30,6 +31,23 @@ router = APIRouter(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _latest_rollback_source(db: Session, tenant_id: str, control_id: str) -> str | None:
+    """Latest engine execution for this tenant and control that changed the tenant
+    (success or partial) and kept a pre-change snapshot."""
+    row = (
+        db.query(ControlExecution.id)
+        .filter(
+            ControlExecution.tenant_id == tenant_id,
+            ControlExecution.control_id == normalize_control_id(control_id),
+            ControlExecution.status.in_([ControlExecutionStatus.SUCCESS, ControlExecutionStatus.PARTIAL]),
+            ControlExecution.snapshot_id.isnot(None),
+        )
+        .order_by(ControlExecution.created_at.desc())
+        .first()
+    )
+    return str(row[0]) if row else None
 
 
 @router.post("/rollback/{compliance_result_id}")
@@ -66,13 +84,6 @@ async def rollback_remediation(
             detail=f"Rollback not supported for {compliance.control_id}",
         )
 
-    remediation_status = current_remediation_status(compliance)
-    if remediation_status != "SUCCESS":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Rollback not allowed from state {remediation_status}",
-        )
-
     is_ca_engine_control = compliance.control_id in {
         "CA_MFA_ALL_USERS",
         "CA_MFA_ADMINS",
@@ -82,6 +93,30 @@ async def rollback_remediation(
         "CA_GUEST_MFA",
         "CA_BREAK_GLASS_EXCLUSION",
     }
+
+    # A CA change whose verification failed leaves the finding FAILED, but the change
+    # is in the tenant and the engine kept a pre-change snapshot: allow undoing it.
+    remediation_status = current_remediation_status(compliance)
+    allowed_states = {"SUCCESS", "FAILED"} if is_ca_engine_control else {"SUCCESS"}
+    if remediation_status not in allowed_states:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Rollback not allowed from state {remediation_status}",
+        )
+
+    ca_execution_id = None
+    if is_ca_engine_control:
+        # The dashboard does not send execution_id; resolve it here, scoped to the
+        # caller's tenant. A client-supplied id is still checked by the engine
+        # against the tenant and control.
+        ca_execution_id = (
+            str(execution_id) if execution_id else _latest_rollback_source(db, current_tenant.id, compliance.control_id)
+        )
+        if not ca_execution_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Nothing to roll back: no Conditional Access change with a pre-change snapshot was found",
+            )
 
     snapshot = None
     if not is_ca_engine_control:
@@ -126,16 +161,11 @@ async def rollback_remediation(
                 snapshot_state=snapshot,
             )
         elif is_ca_engine_control:
-            if not execution_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="execution_id is required for Conditional Access rollback",
-                )
             result = await rollback_control_dispatch(
                 db=db,
                 tenant=current_tenant,
                 control_id=compliance.control_id,
-                execution_id=str(execution_id),
+                execution_id=ca_execution_id,
             )
         else:
             control = CONTROL_REGISTRY.get(compliance.control_id) or {}
