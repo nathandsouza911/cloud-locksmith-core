@@ -59,6 +59,8 @@ _PREFLIGHT_REGISTRY: dict[str, list[PreFlightCheck]] = {
     ],
     "CA_HIGH_RISK_SIGN_IN_BLOCK": [BreakGlassPresenceCheck()],
     "CA_RISK_BASED_STEP_UP_MFA": [BreakGlassPresenceCheck()],
+    "CA_DEVICE_CODE_FLOW_BLOCK": [BreakGlassPresenceCheck()],
+    "CA_AUTHENTICATION_TRANSFER_BLOCK": [BreakGlassPresenceCheck()],
 }
 
 

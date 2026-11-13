@@ -269,7 +269,10 @@ class TestCABlockPolicyExecutor:
         from unittest.mock import patch
 
         mock_result = {"status": "success", "verified": True, "snapshot_id": "snap-1"}
-        with patch("app.services.ca_policy_engine.apply_control", new=AsyncMock(return_value=mock_result)):
+        with (
+            patch("app.services.remediation.preflight.engine.run_preflight", new=self._passing_preflight()),
+            patch("app.services.ca_policy_engine.apply_control", new=AsyncMock(return_value=mock_result)),
+        ):
             result = asyncio.run(executor.execute(gc, {}))
         assert result["status"] == "SUCCESS"
         assert result["verified"] is True
@@ -280,9 +283,19 @@ class TestCABlockPolicyExecutor:
         mock_result = {"status": "blocked", "reason": "NO_CA_LICENSE"}
         from unittest.mock import patch
 
-        with patch("app.services.ca_policy_engine.apply_control", new=AsyncMock(return_value=mock_result)):
+        with (
+            patch("app.services.remediation.preflight.engine.run_preflight", new=self._passing_preflight()),
+            patch("app.services.ca_policy_engine.apply_control", new=AsyncMock(return_value=mock_result)),
+        ):
             result = asyncio.run(executor.execute(gc, {}))
         assert result["status"] == "blocked"
+        assert result["reason"] == "NO_CA_LICENSE"
+
+    @staticmethod
+    def _passing_preflight():
+        # The executor runs the break-glass preflight first (L13); these tests are
+        # about what happens after it passes.
+        return AsyncMock(return_value=MagicMock(all_passed=True))
 
     def test_rollback_no_prior_policy_deletes_clx_policy(self):
         policy = {"id": "pol-x", "displayName": "CLX-DEVICE-CODE-FLOW-BLOCK-v1"}
