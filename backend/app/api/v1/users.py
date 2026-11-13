@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -22,6 +23,28 @@ SEVERITY_RANK = {
     "LOW": 2,
     "INFO": 1,
 }
+
+
+_SIGN_IN_FIELDS = ("lastSignInDateTime", "lastNonInteractiveSignInDateTime", "lastSuccessfulSignInDateTime")
+
+
+def _last_activity(directory_user: dict, local_user: User | None):
+    """Latest Graph signInActivity timestamp, else the local last_login.
+
+    users.last_login is never set for Microsoft tenants, so reading only that column
+    showed every user as "No recent activity" (live run 2026-11-13, L2).
+    """
+    stamps = []
+    for field in _SIGN_IN_FIELDS:
+        value = (directory_user.get("signInActivity") or {}).get(field)
+        if isinstance(value, str) and value:
+            try:
+                stamps.append(datetime.fromisoformat(value.replace("Z", "+00:00")))
+            except ValueError:
+                continue
+    if stamps:
+        return max(stamps)
+    return local_user.last_login if local_user is not None else None
 
 
 def _humanize_control_id(control_id: str) -> str:
@@ -167,7 +190,7 @@ async def list_users(
         _serialize_directory_user(
             user,
             summaries.get(user.get("id")),
-            last_activity=existing_map.get(user.get("id")).last_login if existing_map.get(user.get("id")) else None,
+            last_activity=_last_activity(user, existing_map.get(user.get("id"))),
             roles=sorted(role_map.get(user.get("id"), [])),
             offboarding_status=(
                 session_map.get(user.get("id")).status.value
@@ -239,7 +262,7 @@ async def get_user(
     return _serialize_directory_user(
         directory_user,
         summaries.get(user_id),
-        last_activity=local_user.last_login if local_user else None,
+        last_activity=_last_activity(directory_user, local_user),
         roles=sorted(role_map.get(user_id, [])),
         offboarding_status=(
             session.status.value
