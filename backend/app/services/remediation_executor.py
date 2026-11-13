@@ -133,6 +133,8 @@ def _resource_metadata(evidence: dict) -> tuple[str, str | None]:
     user_id = evidence.get("user_id")
     if resource_type == "TENANT":
         return "TENANT", resource_id
+    if resource_type == "SERVICE_PRINCIPAL" and resource_id:
+        return "SERVICE_PRINCIPAL", resource_id
     if user_id:
         return "USER", user_id
     if resource_id:

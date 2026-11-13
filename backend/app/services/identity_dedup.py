@@ -94,6 +94,12 @@ async def upsert_control_result(
             raise ValueError(f"user_id required for user-scoped findings: {control_id}")
     elif normalized_resource_type == "TENANT":
         resource_key = resource_id or tenant_id
+    elif normalized_resource_type == "SERVICE_PRINCIPAL":
+        # One row per service principal: never fall back to the tenant id, or every
+        # service principal in the tenant would overwrite the same row.
+        resource_key = resource_id
+        if not resource_key:
+            raise ValueError(f"resource_id required for service-principal findings: {control_id}")
     else:
         raise ValueError(f"unsupported resource_type for finding: {normalized_resource_type}")
 
