@@ -41,6 +41,13 @@
   enforced, without the break-glass check. They now follow the finding's mode
   (report-only by default) and run the break-glass check first, like the other
   Conditional Access fixes.
+* A rolled-back Conditional Access fix can be applied again (it was reported as drift).
+* If a Conditional Access rollback fails partway, the dashboard now says so and asks you
+  to retry (it showed a generic error), the failure is recorded in the audit trail, and
+  a retry restores the previous state. A rollback refused before any change explains why.
+* The Users page shows each user's last sign-in (it showed "No recent activity" for
+  everyone).
+* The sidebar and the page content scroll independently.
 
 ## 0.1.0 (2026-11-12)
 
