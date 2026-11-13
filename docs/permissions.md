@@ -24,7 +24,7 @@ The demo (`DEMO_MODE=true`) requests no permissions and makes no Microsoft calls
 | `Policy.ReadWrite.ConditionalAccess` | Create and update the Conditional Access policies behind the `CA_*` fixes, and roll them back. |
 | `RoleManagement.Read.Directory` | Read role assignments and PIM eligibility. |
 | `RoleManagement.ReadWrite.Directory` | Remove excess admin role assignments (`IDENTITY_OVERPRIVILEGED_USER`) and restore them on rollback. |
-| `AuditLog.Read.All` | Sign-in activity (last sign-in, break-glass usage). |
+| `AuditLog.Read.All` | Sign-in activity (last sign-in, break-glass usage) and the service-principal sign-in report used for stale service principals (`/beta/reports/servicePrincipalSignInActivities`, a beta endpoint). |
 | `Reports.Read.All` | Usage and registration reports (MFA registration, licence cost checker). |
 | `MailboxSettings.Read` | Inbox forwarding rules (`IDENTITY_MAIL_FORWARDING_RULE`). |
 

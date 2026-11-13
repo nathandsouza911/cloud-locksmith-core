@@ -36,7 +36,10 @@ from app.services.graph_ca_service import (
 from app.services.graph_client import graph_get, graph_get_all, graph_get_with_token
 from app.services.detection.password_never_expires_detector import evaluate_password_never_expires
 from app.services.detection.app_secret_expiry_detector import evaluate_all_app_secret_expiry
-from app.services.detection.stale_service_principal_detector import evaluate_stale_service_principals
+from app.services.detection.stale_service_principal_detector import (
+    MICROSOFT_FIRST_PARTY_OWNER_IDS,
+    evaluate_stale_service_principals,
+)
 from app.services.detection.service_account_interactive_login_detector import (
     evaluate_service_account_interactive_logins,
 )
@@ -703,19 +706,7 @@ async def run_user_controls(
         )
 
     if "IDENTITY_SERVICE_ACCOUNT_INTERACTIVE_LOGIN" in baseline_controls:
-        svc_findings = evaluate_service_account_interactive_logins(standard_users)
-        for finding in svc_findings:
-            await _safe_upsert_control_result(
-                db=db,
-                tenant_id=tenant_id,
-                control_id=finding["control_id"],
-                resource_type=finding.get("resource_type", "USER"),
-                resource_id=finding.get("resource_id", tenant_id),
-                passed=finding["passed"],
-                severity=finding["severity"],
-                evidence=finding.get("evidence") or {},
-                decision_status="RESOLVED" if finding["passed"] else "PENDING",
-            )
+        await _scan_service_account_logins(db=db, tenant_id=tenant_id, users=standard_users)
 
     # Phishing-resistant MFA check — only for target admin roles, per-user Graph call.
     if "IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA" in baseline_controls:
@@ -967,40 +958,134 @@ async def run_tenant_controls(
     # Stale service principal scan — fail-open; uses per-SP resource_id.
     if "IDENTITY_STALE_SERVICE_PRINCIPAL" in baseline_controls:
         try:
-            service_principals = await graph_get_all(
-                db,
-                tenant,
-                "/servicePrincipals?$select=id,displayName,appId,appDisplayName,"
-                "accountEnabled,signInActivity&$expand=owners($select=id,displayName,userPrincipalName)",
-            )
-            owners_map: dict[str, list[dict]] = {}
-            for _sp in service_principals:
-                _sp_id = _sp.get("id")
-                if _sp_id:
-                    owners_map[_sp_id] = [
-                        {
-                            "id": o.get("id"),
-                            "displayName": o.get("displayName"),
-                            "userPrincipalName": o.get("userPrincipalName"),
-                        }
-                        for o in (_sp.get("owners") or [])
-                        if isinstance(o, dict) and o.get("id")
-                    ]
-            sp_findings = evaluate_stale_service_principals(service_principals, owners_map=owners_map)
-            for finding in sp_findings:
-                await _safe_upsert_control_result(
-                    db=db,
-                    tenant_id=tenant_id,
-                    control_id=finding["control_id"],
-                    resource_type=finding.get("resource_type", "SERVICE_PRINCIPAL"),
-                    resource_id=finding.get("resource_id", tenant_id),
-                    passed=finding["passed"],
-                    severity=finding["severity"],
-                    evidence=finding.get("evidence") or {},
-                    decision_status="RESOLVED" if finding["passed"] else "PENDING",
-                )
+            await _scan_stale_service_principals(db=db, tenant=tenant, tenant_id=tenant_id)
         except Exception:
             logger.exception("stale_service_principal_scan_failed tenant_id=%s", tenant_id)
+
+
+async def _scan_service_account_logins(*, db, tenant_id: str, users: list[dict]) -> None:
+    """IDENTITY_SERVICE_ACCOUNT_INTERACTIVE_LOGIN, always leaving a result (1.8, M2).
+
+    With no service-account-named users the control used to write nothing, so the
+    dashboard could not tell "checked, none found" from "not checked". That case now
+    records one tenant-level pass; with candidates, per-user results are written and
+    any earlier tenant-level row is resolved.
+    """
+    control_id = "IDENTITY_SERVICE_ACCOUNT_INTERACTIVE_LOGIN"
+    svc_findings = evaluate_service_account_interactive_logins(users)
+    if not svc_findings:
+        await _safe_upsert_control_result(
+            db=db,
+            tenant_id=tenant_id,
+            control_id=control_id,
+            resource_type="TENANT",
+            resource_id=tenant_id,
+            passed=True,
+            severity="HIGH",
+            evidence={
+                "service_account_named_users": 0,
+                "detection_reason": "no_service_account_naming_pattern_matched",
+            },
+            decision_status="RESOLVED",
+        )
+        return
+    for finding in svc_findings:
+        await _safe_upsert_control_result(
+            db=db,
+            tenant_id=tenant_id,
+            control_id=finding["control_id"],
+            resource_type=finding.get("resource_type", "USER"),
+            resource_id=finding.get("resource_id", tenant_id),
+            passed=finding["passed"],
+            severity=finding["severity"],
+            evidence=finding.get("evidence") or {},
+            decision_status="RESOLVED" if finding["passed"] else "PENDING",
+        )
+    await resolve_findings_async(
+        db,
+        tenant_id=tenant_id,
+        control_ids=[control_id],
+        resource_type="TENANT",
+    )
+
+
+SP_SIGN_IN_REPORT = "https://graph.microsoft.com/beta/reports/servicePrincipalSignInActivities"
+
+
+async def _scan_stale_service_principals(*, db, tenant, tenant_id: str) -> None:
+    """IDENTITY_STALE_SERVICE_PRINCIPAL with real sign-in data (ROADMAP 1.8, M1).
+
+    Last sign-ins come from the service-principal sign-in report (beta; there is no
+    v1.0 source: servicePrincipal has no signInActivity). Microsoft first-party apps
+    are not judged. If the report cannot be read, nothing is flagged on missing data.
+    Findings this scan no longer reports (Microsoft apps, deleted SPs) are resolved.
+    """
+    service_principals = await graph_get_all(
+        db,
+        tenant,
+        "/servicePrincipals?$select=id,displayName,appId,appDisplayName,accountEnabled,"
+        "appOwnerOrganizationId&$expand=owners($select=id,displayName,userPrincipalName)",
+    )
+    owners_map: dict[str, list[dict]] = {}
+    for sp in service_principals:
+        sp_id = sp.get("id")
+        if sp_id:
+            owners_map[sp_id] = [
+                {
+                    "id": o.get("id"),
+                    "displayName": o.get("displayName"),
+                    "userPrincipalName": o.get("userPrincipalName"),
+                }
+                for o in (sp.get("owners") or [])
+                if isinstance(o, dict) and o.get("id")
+            ]
+    in_scope_ids = [
+        sp["id"]
+        for sp in service_principals
+        if sp.get("id")
+        and sp.get("accountEnabled", True)
+        and sp.get("appOwnerOrganizationId") not in MICROSOFT_FIRST_PARTY_OWNER_IDS
+    ]
+
+    try:
+        report = await graph_get_all(db, tenant, SP_SIGN_IN_REPORT)
+    except Exception as exc:  # noqa: BLE001 - the report needs a licence and AuditLog.Read.All
+        logger.warning(
+            "stale_service_principal_signin_report_unavailable tenant_id=%s error=%s - not evaluated",
+            tenant_id,
+            type(exc).__name__,
+        )
+        report = None
+
+    if report is not None:
+        last_sign_ins = {
+            row.get("appId"): (row.get("lastSignInActivity") or {}).get("lastSignInDateTime")
+            for row in report
+            if isinstance(row, dict) and row.get("appId")
+        }
+        sp_findings = evaluate_stale_service_principals(
+            service_principals, owners_map=owners_map, last_sign_ins=last_sign_ins
+        )
+        for finding in sp_findings:
+            await _safe_upsert_control_result(
+                db=db,
+                tenant_id=tenant_id,
+                control_id=finding["control_id"],
+                resource_type=finding.get("resource_type", "SERVICE_PRINCIPAL"),
+                resource_id=finding.get("resource_id", tenant_id),
+                passed=finding["passed"],
+                severity=finding["severity"],
+                evidence=finding.get("evidence") or {},
+                decision_status="RESOLVED" if finding["passed"] else "PENDING",
+            )
+
+    await resolve_findings_async(
+        db,
+        tenant_id=tenant_id,
+        control_ids=["IDENTITY_STALE_SERVICE_PRINCIPAL"],
+        resource_type="SERVICE_PRINCIPAL",
+        keep_resource_ids=in_scope_ids,
+    )
 
 
 async def run_extended_controls(

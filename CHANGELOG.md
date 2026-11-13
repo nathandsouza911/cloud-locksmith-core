@@ -60,6 +60,14 @@
   inbox rules are read in parallel with a short limit per user.
 * Risk Feed shows the risk distribution above the findings, so the findings use the full
   width.
+* Stale service principals: every service principal was reported as stale, because the
+  scan asked for a sign-in field that service principals do not have. Last sign-ins now
+  come from Microsoft's service-principal sign-in report (a beta Graph endpoint, covered
+  by the existing `AuditLog.Read.All` permission), Microsoft's own built-in apps are no
+  longer judged, and nothing is flagged when the report cannot be read. Earlier false
+  findings are resolved on the next scan.
+* Service-account interactive login now records "no service-account-named accounts
+  found" instead of nothing, so the dashboard shows the check ran.
 
 ## 0.1.0 (2026-11-12)
 
