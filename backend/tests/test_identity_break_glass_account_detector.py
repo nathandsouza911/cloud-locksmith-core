@@ -108,7 +108,7 @@ def test_break_glass_detector_passes_with_two_valid_accounts():
         conditional_access_policies=[
             {
                 "id": "report-only-policy",
-                "state": "reportOnly",
+                "state": "enabledForReportingButNotEnforced",
                 "conditions": {
                     "users": {
                         "includeUsers": ["All"],

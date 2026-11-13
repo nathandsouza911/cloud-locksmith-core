@@ -5,7 +5,7 @@ Access misconfigurations, scores the tenant's posture, and fixes findings throug
 approval-gated workflow with verification and rollback. It is multi-tenant, so an MSP can
 run it across client tenants.
 
-Status: **0.1.0**, first open-source release. AGPL-3.0.
+Status: **0.1.1**. AGPL-3.0. See `CHANGELOG.md` for what changed since the first open-source release (0.1.0).
 
 ## Try the demo (no Microsoft account needed)
 
@@ -40,11 +40,11 @@ Stop it with `docker compose down` (add `-v` to delete the demo database).
 
 | Capability | Status | How it is verified |
 |---|---|---|
-| Scan 27 identity and Conditional Access controls (`docs/controls.md`) | Implemented | Unit tests. A read-only scan was run against a real developer tenant on 2026-11-12, using the code this project was extracted from. |
+| Scan 27 identity and Conditional Access controls (`docs/controls.md`) | Implemented | Unit tests. Scans run against a real developer tenant on 2026-11-12 (predecessor code) and 2026-11-13 (this code, including a read-only check of the stale service principal, service-account and risk-based Conditional Access controls). |
 | Posture score, history and trend | Implemented | Unit tests; demo |
 | Risk feed and attack-path grouping | Implemented | Unit tests; demo |
 | Fix preview for MFA Conditional Access policies (Simulate Fix) | Implemented | Unit tests; demo; real tenant on 2026-11-12 (predecessor code) |
-| Approval-gated fixes with preflight checks, verification and rollback (`docs/remediation-lifecycle.md`) | Implemented | Unit tests only. Not yet run against a real tenant. |
+| Approval-gated fixes with preflight checks, verification and rollback (`docs/remediation-lifecycle.md`) | Implemented | Unit and Postgres integration tests. On a real developer tenant (2026-11-13): one Conditional Access fix (block legacy authentication, report-only) approved, executed, verified and rolled back twice, tenant restored; refusals checked (no break-glass account, expired approval, stale sign-in, concurrent execute). No enforced fix and no other fix has been run against a real tenant. |
 | Multi-tenant access control and tenant isolation | Implemented | Unit and Postgres integration tests, including cross-tenant cases |
 | MSP fleet view, baselines and campaigns | Implemented | Unit tests |
 | Evidence reports (PDF) | Implemented | Unit and integration tests, with PDF rendering stubbed |

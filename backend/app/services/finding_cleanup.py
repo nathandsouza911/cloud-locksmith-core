@@ -26,6 +26,7 @@ def _build_query(
     tenant_id: str,
     control_ids: Iterable[str],
     resource_type: str | None = None,
+    keep_resource_ids: Iterable[str] | None = None,
 ):
     query = select(ComplianceResult).where(
         ComplianceResult.tenant_id == tenant_id,
@@ -33,6 +34,10 @@ def _build_query(
     )
     if resource_type:
         query = query.where(ComplianceResult.resource_type == resource_type)
+    if keep_resource_ids is not None:
+        keep = list(keep_resource_ids)
+        if keep:
+            query = query.where(ComplianceResult.resource_id.not_in(keep))
     return query
 
 
@@ -127,7 +132,10 @@ async def resolve_findings_async(
     tenant_id: str,
     control_ids: Iterable[str],
     resource_type: str | None = None,
+    keep_resource_ids: Iterable[str] | None = None,
 ) -> int:
+    """Resolve the tenant's findings for these controls, except those whose
+    resource_id is in ``keep_resource_ids`` (still reported by the current scan)."""
     control_ids = list(control_ids)
     if not control_ids:
         return 0
@@ -138,6 +146,7 @@ async def resolve_findings_async(
             tenant_id=tenant_id,
             control_ids=control_ids,
             resource_type=resource_type,
+            keep_resource_ids=keep_resource_ids,
         )
     )
     findings = result.scalars().all()

@@ -83,3 +83,30 @@ describe("DemoBanner", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/demo mode/i);
   });
 });
+
+describe("sign-in refused", () => {
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_DEMO_MODE = "false";
+  });
+
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
+  test("explains that the tenant is already owned", async () => {
+    window.history.replaceState(null, "", "/login?connect_error=tenant_already_owned");
+    renderLogin();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/already connected by another account/i);
+  });
+
+  test("never shows message text taken from the URL", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/login?connect_error=connection_failed&connect_error_message=Call%20555-0100%20for%20help",
+    );
+    renderLogin();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sign-in could not be completed.");
+    expect(screen.queryByText(/555-0100/)).not.toBeInTheDocument();
+  });
+});

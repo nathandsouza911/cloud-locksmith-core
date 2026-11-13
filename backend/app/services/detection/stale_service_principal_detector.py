@@ -23,6 +23,16 @@ from datetime import datetime, timezone, timedelta
 
 STALE_THRESHOLD_DAYS = 90
 
+# Tenants that own Microsoft first-party apps (Microsoft Services; Microsoft's own
+# corporate tenant, e.g. Graph Explorer). A customer cannot act on those service
+# principals; judging them buried the real findings (325 of 337 on a live tenant).
+MICROSOFT_FIRST_PARTY_OWNER_IDS = frozenset(
+    {
+        "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+        "72f988bf-86f1-41af-91ab-2d7cd011db47",
+    }
+)
+
 
 def _parse_graph_datetime(dt_str: str | None) -> datetime | None:
     if not isinstance(dt_str, str) or not dt_str:
@@ -38,6 +48,7 @@ def evaluate_stale_service_principals(
     service_principals: list[dict],
     *,
     owners_map: dict[str, list[dict]] | None = None,
+    last_sign_ins: dict[str, str | None] | None = None,
 ) -> list[dict]:
     """Return one finding per stale or never-authenticated enabled service principal.
 
@@ -46,6 +57,12 @@ def evaluate_stale_service_principals(
 
     evidence keys: sp_id, display_name, app_id, last_sign_in, days_inactive,
                    owners, stale, never_authenticated
+
+    ``last_sign_ins`` maps appId to the last sign-in time from
+    GET /beta/reports/servicePrincipalSignInActivities; an appId missing from it
+    never signed in. servicePrincipal has no signInActivity property (Graph drops
+    it from $select silently), so the scan always passes the report. Without it
+    the SP's own signInActivity is read, for callers that supply it directly.
     """
     cutoff = datetime.now(tz=timezone.utc) - timedelta(days=STALE_THRESHOLD_DAYS)
     _owners_map = owners_map or {}
@@ -55,11 +72,15 @@ def evaluate_stale_service_principals(
             continue
         if not sp.get("accountEnabled", True):
             continue  # already disabled — not an active risk
+        if sp.get("appOwnerOrganizationId") in MICROSOFT_FIRST_PARTY_OWNER_IDS:
+            continue  # Microsoft first-party app: not the tenant's to clean up
         sp_id = sp.get("id")
         if not sp_id:
             continue
-        sign_in_activity = sp.get("signInActivity") or {}
-        last_sign_in_str = sign_in_activity.get("lastSignInDateTime")
+        if last_sign_ins is not None:
+            last_sign_in_str = last_sign_ins.get(sp.get("appId"))
+        else:
+            last_sign_in_str = (sp.get("signInActivity") or {}).get("lastSignInDateTime")
         last_sign_in = _parse_graph_datetime(last_sign_in_str)
         is_stale = last_sign_in is None or last_sign_in < cutoff
         display_name = sp.get("displayName")

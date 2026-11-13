@@ -11,7 +11,7 @@ class ConditionalAccessPolicy(Base):
 
     policy_id = Column(String, nullable=False)
     display_name = Column(String)
-    state = Column(String)  # enabled / disabled / reportOnly
+    state = Column(String)  # enabled / disabled / enabledForReportingButNotEnforced (Graph values)
 
     policy_version = Column(Integer, nullable=False, default=1)
     managed_by = Column(String(64), nullable=True)

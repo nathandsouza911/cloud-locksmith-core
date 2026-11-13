@@ -7,7 +7,7 @@ import { Card, PageHeader, Button, SimulationPanel } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 import { startMicrosoftOAuth } from "@/lib/auth";
 import { useSimulation, useUsers } from "@/lib/api/hooks";
-import { buildTenantIdentitySnapshot } from "@/lib/simulation";
+import { requireTenantIdentitySnapshot } from "@/lib/simulation";
 import { deleteTenant } from "@/lib/api/endpoints";
 
 export default function SettingsPage() {
@@ -51,10 +51,7 @@ export default function SettingsPage() {
     setSimulationError(null);
     setShowSimulationPanel(true);
     try {
-      const tenantSnapshot = buildTenantIdentitySnapshot(usersQuery.data ?? []);
-      if (!tenantSnapshot) {
-        throw new Error("Tenant identity data is still loading.");
-      }
+      const tenantSnapshot = requireTenantIdentitySnapshot(usersQuery.data, usersQuery.error);
       await runSimulation({
         tenant_snapshot: { ...tenantSnapshot },
         proposed_change: {

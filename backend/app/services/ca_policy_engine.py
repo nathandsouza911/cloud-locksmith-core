@@ -30,6 +30,7 @@ from app.services.graph_role_members_service import fetch_role_members
 from app.services.graph_user_service import fetch_users
 from app.config import settings
 from app.services.license_check_service import check_conditional_access_license
+from app.services.ca_policy_states import CA_STATE_REPORT_ONLY
 from app.services.remediation.mfa_policy import (
     PRIVILEGED_ROLE_IDS,
     build_authentication_transfer_block_policy,
@@ -118,6 +119,11 @@ class ControlEngineError(RuntimeError):
     pass
 
 
+class RollbackIncompleteError(ControlEngineError):
+    """A rollback failed after it started changing the tenant: some policies may be
+    restored and others not. Retrying the rollback converges to the snapshot."""
+
+
 @asynccontextmanager
 async def _tenant_ca_mutation_lock(db, tenant_id: str):
     has_connection = callable(getattr(db, "connection", None))
@@ -193,10 +199,32 @@ def _normalize_policy(policy: dict) -> dict:
     }
 
 
+def _comparable(value):
+    """Graph returns unset CA fields as null or [] and adds @odata annotations; the
+    payload we send omits them. Drop empty values and annotations, and compare lists of
+    plain values regardless of order, so only meaningful differences count as drift."""
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            if "@odata" in str(key):
+                continue
+            item = _comparable(item)
+            if item is None or item == [] or item == {}:
+                continue
+            cleaned[key] = item
+        return cleaned
+    if isinstance(value, list):
+        items = [_comparable(item) for item in value]
+        if all(isinstance(item, (str, int, float, bool)) for item in items):
+            return sorted(items, key=lambda item: (type(item).__name__, item))
+        return items
+    return value
+
+
 def _normalize_policy_semantics(policy: dict) -> dict:
     normalized = _normalize_policy(policy)
     normalized.pop("id", None)
-    return normalized
+    return _comparable(normalized)
 
 
 def get_control_policy_base_name(control_id: str) -> str:
@@ -863,6 +891,11 @@ async def apply_control(
     from app.services.remediation_executor import RemediationGraphClient
 
     graph_client = RemediationGraphClient(db=db, tenant=tenant)
+    # Read-only safety checks first: the licence probe below writes to the tenant.
+    break_glass_ids = list_break_glass_user_ids(db=db, tenant_id=tenant.id)
+    if not break_glass_ids:
+        raise ControlEngineError("Break-glass accounts are required before applying CLX Conditional Access policies")
+    await _validate_break_glass_accounts(graph_client, break_glass_ids)
     if not await check_conditional_access_license(graph_client):
         execution = _record_control_execution(
             db=db,
@@ -884,10 +917,6 @@ async def apply_control(
             "control_id": normalized_control_id,
             "execution_id": str(execution.id),
         }
-    break_glass_ids = list_break_glass_user_ids(db=db, tenant_id=tenant.id)
-    if not break_glass_ids:
-        raise ControlEngineError("Break-glass accounts are required before applying CLX Conditional Access policies")
-    await _validate_break_glass_accounts(graph_client, break_glass_ids)
 
     current_state = await get_control_state(db, tenant.id, normalized_control_id)
     current_managed_policy_ids = _managed_policy_ids_from_state(current_state)
@@ -936,8 +965,12 @@ async def apply_control(
     )
     normalized_expected_policies = [_normalize_policy(desired_policy)]
 
+    # Drift / no-op only make sense when the engine manages a policy. With none (first
+    # apply, or after a rollback emptied managed_policy_ids) the policy is created
+    # below; otherwise a rolled-back control could never be applied again.
     if (
         current_state is not None
+        and current_managed_policy_ids
         and current_state.mode == requested_mode
         and current_state.rollout_phase == requested_rollout_phase
         and current_state.rollout_percentage == requested_rollout_percentage
@@ -1075,10 +1108,19 @@ async def apply_control(
             verified_structural = True
         except ControlEngineError:
             verified_structural = False
-        verified_semantic = await _verify_control_semantics(
-            graph_client=graph_client,
-            control_id=normalized_control_id,
-        )
+        # The detectors count only enabled policies, so they cannot verify a report-only
+        # policy. A report-only fix is verified structurally: the managed policy exists
+        # exactly as intended, in the report-only state. It protects no one, so callers
+        # must not treat it as resolving the finding (see verification_scope).
+        report_only = desired_policy.get("state") == CA_STATE_REPORT_ONLY
+        verification_scope = "report_only" if report_only else "enforced"
+        if report_only:
+            verified_semantic = True
+        else:
+            verified_semantic = await _verify_control_semantics(
+                graph_client=graph_client,
+                control_id=normalized_control_id,
+            )
         affected_users = await calculate_affected_users(
             graph_client=graph_client,
             policy=desired_policy,
@@ -1105,13 +1147,17 @@ async def apply_control(
                 policies_created=policies_created,
                 policies_updated=policies_updated,
                 managed_policy_ids=new_managed_policy_ids,
-                error_message="VERIFICATION_FAILED",
+                error_message=(
+                    f"VERIFICATION_FAILED structural={verified_structural} semantic={verified_semantic} "
+                    f"scope={verification_scope}"
+                ),
                 verified=False,
             )
             return {
                 "status": "partial",
                 "reason": "verification_failed",
                 "verified": False,
+                "verification_scope": verification_scope,
                 "control_id": normalized_control_id,
                 "snapshot_id": str(snapshot.id),
                 "execution_id": str(execution.id),
@@ -1146,6 +1192,7 @@ async def apply_control(
         return {
             "status": "success",
             "verified": True,
+            "verification_scope": verification_scope,
             "affected_users": affected_users,
             "control_id": normalized_control_id,
             "snapshot_id": str(snapshot.id),
@@ -1260,8 +1307,10 @@ async def rollback_control(
         source_execution = result.scalars().first()
         if source_execution is None:
             raise ControlEngineError("Control execution not found")
-        if source_execution.status != ControlExecutionStatus.SUCCESS:
-            raise ControlEngineError("Cannot rollback failed/partial execution")
+        # PARTIAL: the change was applied but not verified; the snapshot still holds the
+        # pre-change state. FAILED: nothing was applied, so there is nothing to undo.
+        if source_execution.status not in {ControlExecutionStatus.SUCCESS, ControlExecutionStatus.PARTIAL}:
+            raise ControlEngineError("Cannot rollback a failed execution: nothing was applied")
         if source_execution.snapshot_id is None:
             raise ControlEngineError("Execution has no snapshot_id, cannot rollback safely")
 
@@ -1336,7 +1385,7 @@ async def rollback_control(
             managed_policy_ids=_normalize_managed_policy_ids([*current_managed_policy_ids, *restored_policy_ids]),
             error_message=str(exc),
         )
-        raise ControlEngineError(f"Rollback failed for {normalized_control_id}: {exc}") from exc
+        raise RollbackIncompleteError(f"Rollback failed for {normalized_control_id}: {exc}") from exc
     except Exception as exc:
         state = await create_or_update_control_state(
             db,
@@ -1358,7 +1407,7 @@ async def rollback_control(
             managed_policy_ids=_normalize_managed_policy_ids([*current_managed_policy_ids, *restored_policy_ids]),
             error_message=str(exc),
         )
-        raise ControlEngineError(f"Rollback failed for {normalized_control_id}: {exc}") from exc
+        raise RollbackIncompleteError(f"Rollback failed for {normalized_control_id}: {exc}") from exc
 
     state = await get_control_state(db, tenant.id, normalized_control_id)
     if state is None:
@@ -1459,6 +1508,11 @@ async def apply_break_glass_exclusion(
     from app.services.remediation_executor import RemediationGraphClient
 
     graph_client = RemediationGraphClient(db=db, tenant=tenant)
+    # Read-only safety checks first: the licence probe below writes to the tenant.
+    break_glass_ids = list_break_glass_user_ids(db=db, tenant_id=tenant.id)
+    if not break_glass_ids:
+        raise ControlEngineError("Break-glass accounts are required before applying CA_BREAK_GLASS_EXCLUSION")
+    await _validate_break_glass_accounts(graph_client, break_glass_ids)
     if not await check_conditional_access_license(graph_client):
         execution = _record_control_execution(
             db=db,
@@ -1478,11 +1532,6 @@ async def apply_break_glass_exclusion(
             "control_id": CONTROL_BREAK_GLASS_EXCLUSION,
             "execution_id": str(execution.id),
         }
-
-    break_glass_ids = list_break_glass_user_ids(db=db, tenant_id=tenant.id)
-    if not break_glass_ids:
-        raise ControlEngineError("Break-glass accounts are required before applying CA_BREAK_GLASS_EXCLUSION")
-    await _validate_break_glass_accounts(graph_client, break_glass_ids)
 
     all_policies = await graph_client.list_conditional_access_policies()
     diffs: list[dict] = []

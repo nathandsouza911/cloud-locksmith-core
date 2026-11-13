@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     PORT: int = 8000
     REMEDIATION_DRY_RUN: bool = True
-    ENABLE_SCHEDULER: bool = True
+    ENABLE_SCHEDULER: bool = False
     # Verification lifecycle confirmation thresholds (Phase C)
     VERIFICATION_CONFIRMATION_READS: int = 2
     VERIFICATION_CONFIRMATION_DELAY_SECONDS: float = 30.0

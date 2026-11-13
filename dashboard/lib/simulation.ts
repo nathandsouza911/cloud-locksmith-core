@@ -37,3 +37,22 @@ export function buildTenantIdentitySnapshot(users: DirectoryUser[]): TenantIdent
     roles: buildRoleMembershipMap(users),
   };
 }
+
+/**
+ * Snapshot for a simulation, or an error that says why there is none. When the user
+ * list failed (e.g. Preview sign-in: full connect required) the real reason is shown
+ * instead of "still loading".
+ */
+export function requireTenantIdentitySnapshot(
+  users: DirectoryUser[] | null | undefined,
+  usersError: string | null | undefined,
+): TenantIdentitySnapshot {
+  if (usersError) {
+    throw new Error(usersError);
+  }
+  const snapshot = buildTenantIdentitySnapshot(users ?? []);
+  if (!snapshot) {
+    throw new Error("Tenant identity data is still loading.");
+  }
+  return snapshot;
+}

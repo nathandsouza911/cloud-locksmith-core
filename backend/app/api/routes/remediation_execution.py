@@ -23,7 +23,7 @@ from app.services.remediation_audit_service import (
     log_audit_event,
     mark_remediation_approved,
 )
-from app.services.remediation_execution_service import execute_approved_remediation
+from app.services.remediation_execution_service import RemediationRequestRefused, execute_approved_remediation
 from app.services.remediation_executor import RemediationGraphClient
 from app.services.remediation_preview_service import build_remediation_preview
 from app.utils.tenant_guard import enforce_tenant_scope
@@ -242,6 +242,12 @@ async def execute_remediation_endpoint(
                     "status": "success",
                 }
         return JSONResponse(status_code=200, content=result)
+    except RemediationRequestRefused as exc:
+        # Fixed refusal text written for the user (expired approval, licence, state).
+        return JSONResponse(
+            status_code=400,
+            content={"status": "failed", "reason": exc.code, "message": str(exc)},
+        )
     except ValueError as exc:
         # Preserve the explicit user-facing validation message but map known
         # sentinel strings to stable error codes; generic ValueError messages

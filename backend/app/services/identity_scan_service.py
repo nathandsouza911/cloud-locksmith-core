@@ -33,10 +33,13 @@ from app.services.graph_ca_service import (
     fetch_conditional_access_policies,
     build_ca_group_member_map,
 )
-from app.services.graph_client import graph_get, graph_get_all
+from app.services.graph_client import graph_get, graph_get_all, graph_get_with_token
 from app.services.detection.password_never_expires_detector import evaluate_password_never_expires
 from app.services.detection.app_secret_expiry_detector import evaluate_all_app_secret_expiry
-from app.services.detection.stale_service_principal_detector import evaluate_stale_service_principals
+from app.services.detection.stale_service_principal_detector import (
+    MICROSOFT_FIRST_PARTY_OWNER_IDS,
+    evaluate_stale_service_principals,
+)
 from app.services.detection.service_account_interactive_login_detector import (
     evaluate_service_account_interactive_logins,
 )
@@ -78,6 +81,7 @@ from app.services.finding_cleanup import (
 )
 from app.services.remediation_decision_engine import generate_remediation_decisions
 from app.services.token_manager import get_valid_access_token
+from app.services.ca_policy_states import CA_STATE_REPORT_ONLY
 from app.services.graph.graph_fetcher import GraphFetcher
 from app.services.detection.conditional_access.ca_mfa_checks import (
     detect_ca_mfa_all_users,
@@ -134,8 +138,8 @@ def _mfa_policy_state(policy: dict) -> str | None:
     state = str(policy.get("state") or "").strip()
     if state == "enabled":
         return "enabled"
-    if state == "reportOnly":
-        return "reportOnly"
+    if state == CA_STATE_REPORT_ONLY:
+        return "report_only"
     return None
 
 
@@ -163,7 +167,7 @@ def _evaluate_mfa_coverage(
 
         if policy_state == "enabled":
             enabled_policy_ids.append(policy_id)
-        elif policy_state == "reportOnly":
+        elif policy_state == "report_only":
             report_only_policy_ids.append(policy_id)
 
     if enabled_policy_ids:
@@ -256,6 +260,62 @@ def _build_user_context(users: list[dict], role_map: dict[str, list[dict[str, st
     return user_context
 
 
+# Mail-forwarding scan limits. Graph hangs on users without an Exchange mailbox; one
+# at a time with the 20 s HTTP timeout, 14 users took ~8 minutes in the sign-in scan
+# (live run 2026-11-13, L1).
+MAIL_RULES_CONCURRENCY = 5
+MAIL_RULES_TIMEOUT_SECONDS = 10
+
+
+async def _get_all_with_token(access_token: str, path: str, tenant_id: str) -> list[dict]:
+    results: list[dict] = []
+    next_path: str | None = path
+    while next_path:
+        page = await graph_get_with_token(access_token, next_path, expected_tenant_id=tenant_id)
+        results.extend(page.get("value", []))
+        next_path = page.get("@odata.nextLink")
+    return results
+
+
+async def _fetch_inbox_rules(*, db, tenant, users: list[dict]) -> tuple[dict[str, list[dict]], list[str]]:
+    """Inbox rules per user, fetched concurrently with a per-user time limit.
+
+    Returns (rules by user id, ids of users whose rules could not be read). Users
+    with no mail address have no mailbox and are not queried. The token is read once
+    up front, so the concurrent requests never use the (async) database session; the
+    token is still checked against this tenant on every request.
+    """
+    candidates = [user for user in users if user.get("id") and user.get("mail")]
+    if not candidates:
+        return {}, []
+    access_token = await get_valid_access_token(tenant.id, db=db)
+    semaphore = asyncio.Semaphore(MAIL_RULES_CONCURRENCY)
+
+    async def fetch(user: dict) -> tuple[str, list[dict] | None]:
+        user_id = user["id"]
+        path = f"/users/{user_id}/mailFolders/inbox/messageRules"
+        async with semaphore:
+            try:
+                rules = await asyncio.wait_for(
+                    _get_all_with_token(access_token, path, tenant.id),
+                    MAIL_RULES_TIMEOUT_SECONDS,
+                )
+                return user_id, rules
+            except Exception as exc:  # noqa: BLE001 - one mailbox must not stop the scan
+                logger.warning(
+                    "mail_forwarding_rule_fetch_failed tenant_id=%s user_id=%s error=%s",
+                    tenant.id,
+                    user_id,
+                    type(exc).__name__,
+                )
+                return user_id, None
+
+    fetched = await asyncio.gather(*(fetch(user) for user in candidates))
+    rules_by_user = {user_id: rules for user_id, rules in fetched if rules is not None}
+    unavailable = [user_id for user_id, rules in fetched if rules is None]
+    return rules_by_user, unavailable
+
+
 async def run_user_controls(
     db: AsyncSession,
     tenant,
@@ -329,17 +389,12 @@ async def run_user_controls(
             if "@" in (user.get("userPrincipalName") or "")
         }
         forwarding_findings = 0
+        rules_by_user, rules_unavailable = await _fetch_inbox_rules(db=db, tenant=tenant, users=standard_users)
         for user in standard_users:
             user_id = user.get("id")
-            try:
-                rules = await graph_get_all(db, tenant, f"/users/{user_id}/mailFolders/inbox/messageRules")
-            except Exception:
-                logger.exception(
-                    "mail_forwarding_rule_fetch_failed tenant_id=%s user_id=%s — skipping user",
-                    tenant_id,
-                    user_id,
-                )
-                continue
+            if user_id not in rules_by_user:
+                continue  # no mailbox, or rules could not be read (logged)
+            rules = rules_by_user[user_id]
             result = evaluate_user_forwarding_rules(user, rules, tenant_domains)
             if result is None:
                 await _safe_upsert_control_result(
@@ -375,9 +430,13 @@ async def run_user_controls(
             resource_type="TENANT",
         )
         logger.info(
-            "identity_scan_service_mail_forwarding_summary tenant_id=%s forwarding_findings=%s",
+            "identity_scan_service_mail_forwarding_summary tenant_id=%s forwarding_findings=%s "
+            "evaluated=%s unavailable=%s without_mailbox=%s",
             tenant_id,
             forwarding_findings,
+            len(rules_by_user),
+            len(rules_unavailable),
+            sum(1 for user in standard_users if not user.get("mail")),
         )
 
     user_map = {u["id"]: u for u in standard_users}
@@ -647,19 +706,7 @@ async def run_user_controls(
         )
 
     if "IDENTITY_SERVICE_ACCOUNT_INTERACTIVE_LOGIN" in baseline_controls:
-        svc_findings = evaluate_service_account_interactive_logins(standard_users)
-        for finding in svc_findings:
-            await _safe_upsert_control_result(
-                db=db,
-                tenant_id=tenant_id,
-                control_id=finding["control_id"],
-                resource_type=finding.get("resource_type", "USER"),
-                resource_id=finding.get("resource_id", tenant_id),
-                passed=finding["passed"],
-                severity=finding["severity"],
-                evidence=finding.get("evidence") or {},
-                decision_status="RESOLVED" if finding["passed"] else "PENDING",
-            )
+        await _scan_service_account_logins(db=db, tenant_id=tenant_id, users=standard_users)
 
     # Phishing-resistant MFA check — only for target admin roles, per-user Graph call.
     if "IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA" in baseline_controls:
@@ -715,6 +762,27 @@ _AUTHORIZATION_POLICY_CONTROLS = {
     "IDENTITY_USER_CONSENT_POLICY": "HIGH",
     "IDENTITY_GUEST_INVITES_OPEN": "MEDIUM",
 }
+
+
+async def _fetch_privileged_role_assignments(db: AsyncSession, tenant) -> list[dict]:
+    """Active assignments to the privileged roles, one Graph query per role.
+
+    Graph rejects ``roleDefinitionId in (...)`` on this endpoint ("Multiple
+    roleDefinitionId in filter not supported"); ``roleDefinitionId eq '<id>'`` is the
+    documented form. Any failed query raises, so a role is never silently skipped.
+    """
+    assignments: list[dict] = []
+    for role_definition_id in sorted(_PERMANENT_ROLE_TARGET_IDS):
+        assignments.extend(
+            await graph_get_all(
+                db,
+                tenant,
+                "/roleManagement/directory/roleAssignments"
+                "?$select=id,principalId,roleDefinitionId,directoryScopeId"
+                f"&$filter=roleDefinitionId eq '{role_definition_id}'",
+            )
+        )
+    return assignments
 
 
 async def run_tenant_controls(
@@ -846,13 +914,7 @@ async def run_tenant_controls(
     # Permanent role assignment scan — fail-open; per-user findings.
     if "IDENTITY_PERMANENT_ROLE_ASSIGNMENT" in baseline_controls:
         try:
-            role_assignments = await graph_get_all(
-                db,
-                tenant,
-                "/roleManagement/directory/roleAssignments"
-                "?$select=id,principalId,roleDefinitionId,directoryScopeId"
-                f"&$filter=roleDefinitionId in ({','.join(repr(rid) for rid in _PERMANENT_ROLE_TARGET_IDS)})",
-            )
+            role_assignments = await _fetch_privileged_role_assignments(db, tenant)
             try:
                 eligible_schedules = await graph_get_all(
                     db,
@@ -896,40 +958,134 @@ async def run_tenant_controls(
     # Stale service principal scan — fail-open; uses per-SP resource_id.
     if "IDENTITY_STALE_SERVICE_PRINCIPAL" in baseline_controls:
         try:
-            service_principals = await graph_get_all(
-                db,
-                tenant,
-                "/servicePrincipals?$select=id,displayName,appId,appDisplayName,"
-                "accountEnabled,signInActivity&$expand=owners($select=id,displayName,userPrincipalName)",
-            )
-            owners_map: dict[str, list[dict]] = {}
-            for _sp in service_principals:
-                _sp_id = _sp.get("id")
-                if _sp_id:
-                    owners_map[_sp_id] = [
-                        {
-                            "id": o.get("id"),
-                            "displayName": o.get("displayName"),
-                            "userPrincipalName": o.get("userPrincipalName"),
-                        }
-                        for o in (_sp.get("owners") or [])
-                        if isinstance(o, dict) and o.get("id")
-                    ]
-            sp_findings = evaluate_stale_service_principals(service_principals, owners_map=owners_map)
-            for finding in sp_findings:
-                await _safe_upsert_control_result(
-                    db=db,
-                    tenant_id=tenant_id,
-                    control_id=finding["control_id"],
-                    resource_type=finding.get("resource_type", "SERVICE_PRINCIPAL"),
-                    resource_id=finding.get("resource_id", tenant_id),
-                    passed=finding["passed"],
-                    severity=finding["severity"],
-                    evidence=finding.get("evidence") or {},
-                    decision_status="RESOLVED" if finding["passed"] else "PENDING",
-                )
+            await _scan_stale_service_principals(db=db, tenant=tenant, tenant_id=tenant_id)
         except Exception:
             logger.exception("stale_service_principal_scan_failed tenant_id=%s", tenant_id)
+
+
+async def _scan_service_account_logins(*, db, tenant_id: str, users: list[dict]) -> None:
+    """IDENTITY_SERVICE_ACCOUNT_INTERACTIVE_LOGIN, always leaving a result (1.8, M2).
+
+    With no service-account-named users the control used to write nothing, so the
+    dashboard could not tell "checked, none found" from "not checked". That case now
+    records one tenant-level pass; with candidates, per-user results are written and
+    any earlier tenant-level row is resolved.
+    """
+    control_id = "IDENTITY_SERVICE_ACCOUNT_INTERACTIVE_LOGIN"
+    svc_findings = evaluate_service_account_interactive_logins(users)
+    if not svc_findings:
+        await _safe_upsert_control_result(
+            db=db,
+            tenant_id=tenant_id,
+            control_id=control_id,
+            resource_type="TENANT",
+            resource_id=tenant_id,
+            passed=True,
+            severity="HIGH",
+            evidence={
+                "service_account_named_users": 0,
+                "detection_reason": "no_service_account_naming_pattern_matched",
+            },
+            decision_status="RESOLVED",
+        )
+        return
+    for finding in svc_findings:
+        await _safe_upsert_control_result(
+            db=db,
+            tenant_id=tenant_id,
+            control_id=finding["control_id"],
+            resource_type=finding.get("resource_type", "USER"),
+            resource_id=finding.get("resource_id", tenant_id),
+            passed=finding["passed"],
+            severity=finding["severity"],
+            evidence=finding.get("evidence") or {},
+            decision_status="RESOLVED" if finding["passed"] else "PENDING",
+        )
+    await resolve_findings_async(
+        db,
+        tenant_id=tenant_id,
+        control_ids=[control_id],
+        resource_type="TENANT",
+    )
+
+
+SP_SIGN_IN_REPORT = "https://graph.microsoft.com/beta/reports/servicePrincipalSignInActivities"
+
+
+async def _scan_stale_service_principals(*, db, tenant, tenant_id: str) -> None:
+    """IDENTITY_STALE_SERVICE_PRINCIPAL with real sign-in data (ROADMAP 1.8, M1).
+
+    Last sign-ins come from the service-principal sign-in report (beta; there is no
+    v1.0 source: servicePrincipal has no signInActivity). Microsoft first-party apps
+    are not judged. If the report cannot be read, nothing is flagged on missing data.
+    Findings this scan no longer reports (Microsoft apps, deleted SPs) are resolved.
+    """
+    service_principals = await graph_get_all(
+        db,
+        tenant,
+        "/servicePrincipals?$select=id,displayName,appId,appDisplayName,accountEnabled,"
+        "appOwnerOrganizationId&$expand=owners($select=id,displayName,userPrincipalName)",
+    )
+    owners_map: dict[str, list[dict]] = {}
+    for sp in service_principals:
+        sp_id = sp.get("id")
+        if sp_id:
+            owners_map[sp_id] = [
+                {
+                    "id": o.get("id"),
+                    "displayName": o.get("displayName"),
+                    "userPrincipalName": o.get("userPrincipalName"),
+                }
+                for o in (sp.get("owners") or [])
+                if isinstance(o, dict) and o.get("id")
+            ]
+    in_scope_ids = [
+        sp["id"]
+        for sp in service_principals
+        if sp.get("id")
+        and sp.get("accountEnabled", True)
+        and sp.get("appOwnerOrganizationId") not in MICROSOFT_FIRST_PARTY_OWNER_IDS
+    ]
+
+    try:
+        report = await graph_get_all(db, tenant, SP_SIGN_IN_REPORT)
+    except Exception as exc:  # noqa: BLE001 - the report needs a licence and AuditLog.Read.All
+        logger.warning(
+            "stale_service_principal_signin_report_unavailable tenant_id=%s error=%s - not evaluated",
+            tenant_id,
+            type(exc).__name__,
+        )
+        report = None
+
+    if report is not None:
+        last_sign_ins = {
+            row.get("appId"): (row.get("lastSignInActivity") or {}).get("lastSignInDateTime")
+            for row in report
+            if isinstance(row, dict) and row.get("appId")
+        }
+        sp_findings = evaluate_stale_service_principals(
+            service_principals, owners_map=owners_map, last_sign_ins=last_sign_ins
+        )
+        for finding in sp_findings:
+            await _safe_upsert_control_result(
+                db=db,
+                tenant_id=tenant_id,
+                control_id=finding["control_id"],
+                resource_type=finding.get("resource_type", "SERVICE_PRINCIPAL"),
+                resource_id=finding.get("resource_id", tenant_id),
+                passed=finding["passed"],
+                severity=finding["severity"],
+                evidence=finding.get("evidence") or {},
+                decision_status="RESOLVED" if finding["passed"] else "PENDING",
+            )
+
+    await resolve_findings_async(
+        db,
+        tenant_id=tenant_id,
+        control_ids=["IDENTITY_STALE_SERVICE_PRINCIPAL"],
+        resource_type="SERVICE_PRINCIPAL",
+        keep_resource_ids=in_scope_ids,
+    )
 
 
 async def run_extended_controls(

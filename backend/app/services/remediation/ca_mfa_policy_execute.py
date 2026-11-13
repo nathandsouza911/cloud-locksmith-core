@@ -2,7 +2,7 @@
 
 These controls deploy CA policies that enforce MFA or block legacy authentication
 protocols. Unlike the block-policy controls (device code flow, auth transfer), the
-execution mode is variable — the policy can be created in audit (reportOnly) or
+execution mode is variable — the policy can be created in audit (report-only) or
 enforced (enabled) state. Mode is derived from evidence["enforcement_mode"] and
 defaults to "audit" so that an unspecified mode always creates the policy in
 report-only state, never enforced without an explicit caller decision.
@@ -106,11 +106,16 @@ class CAMFAPolicyExecutor:
             rollout_phase=rollout_phase,
         )
         ca_status = (result or {}).get("status")
-        if ca_status in {"blocked", "partial", "failed"}:
+        # Only the engine's success statuses are a success; anything else (blocked,
+        # partial, failed, drift_detected, ...) is returned as is.
+        if ca_status not in {"success", "no-op"}:
             return result
         return {
             "status": "SUCCESS",
             "verified": result.get("verified", True),
+            # "report_only": the policy exists as intended but protects no one, so the
+            # finding must stay open (see execute_approved_remediation).
+            "verification_scope": result.get("verification_scope"),
             "control_id": self._control_id,
             "snapshot": {
                 "control_id": self._control_id,

@@ -38,6 +38,7 @@ import { PreviewModeBanner } from "@/components/ui/PreviewModeBanner";
 import { useBreakGlassEvents } from "@/lib/api/hooks";
 import { useAuth } from "@/lib/auth-context";
 import { startMicrosoftOAuth } from "@/lib/auth";
+import { loginPathKeepingConnectError } from "@/lib/connect-errors";
 
 // Sprint 1 — navigation is organised by WORK, not by data category
 // (Product Bible §14). "My Work" leads; the posture Dashboard is demoted under
@@ -118,7 +119,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!loading && !authed) {
-      router.replace("/login");
+      // Keep a sign-in failure code (e.g. a refused Microsoft callback) so /login can explain it.
+      router.replace(loginPathKeepingConnectError(window.location.search));
     }
   }, [loading, authed, router]);
 
@@ -153,14 +155,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!authed) return null;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 font-sans flex">
+    // The shell is the height of the window and clips; the sidebar nav and <main>
+    // scroll independently, so the sidebar stays put while the page scrolls.
+    <div className="h-screen overflow-hidden bg-gray-950 text-gray-100 font-sans flex">
       <aside
         className={`
           fixed inset-y-0 left-0 z-40 w-64 flex flex-col
           bg-gray-900/98 backdrop-blur border-r border-gray-800
           transition-transform duration-200
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          lg:relative lg:translate-x-0 lg:flex
+          lg:relative lg:h-full lg:translate-x-0 lg:flex
         `}
       >
         <div className="flex items-center gap-2.5 px-5 py-5 border-b border-gray-800">
@@ -206,7 +210,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         ) : null}
 
-        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
+        <nav className="flex-1 min-h-0 px-3 py-4 overflow-y-auto space-y-5">
           {navGroups.map((group) => (
             <div key={group.label} data-nav-group={group.label}>
               <p
@@ -287,8 +291,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-20 h-14 flex items-center gap-4 px-4 lg:px-6 bg-gray-950/80 backdrop-blur border-b border-gray-800">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+        <header className="shrink-0 z-20 h-14 flex items-center gap-4 px-4 lg:px-6 bg-gray-950/80 backdrop-blur border-b border-gray-800">
           <button
             onClick={() => setSidebarOpen((value) => !value)}
             className="lg:hidden p-1.5 rounded-md text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
@@ -321,7 +325,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {isPreviewMode && <PreviewModeBanner />}
 
-        <main className="flex-1 overflow-auto px-4 lg:px-6 py-6">
+        <main className="flex-1 min-h-0 overflow-y-auto px-4 lg:px-6 py-6">
           {tenantId && latestBreakGlassEvent ? (
             <div className="mb-6 rounded-2xl border border-red-500/40 bg-[linear-gradient(135deg,rgba(127,29,29,0.92),rgba(17,24,39,0.96))] px-5 py-4 shadow-lg shadow-red-950/40">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

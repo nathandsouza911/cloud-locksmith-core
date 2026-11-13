@@ -6,7 +6,7 @@ import { Card } from "@/components/ui";
 import { runSimulation, type SimulationRunResponse } from "@/lib/api/endpoints";
 import { useUsers } from "@/lib/api/hooks";
 import { useAuth } from "@/lib/auth-context";
-import { buildTenantIdentitySnapshot } from "@/lib/simulation";
+import { requireTenantIdentitySnapshot } from "@/lib/simulation";
 
 export type EditablePolicy = {
   id: string;
@@ -71,10 +71,7 @@ export default function PolicyEditor({ policies, value, onChange }: PolicyEditor
       setSimulationError(null);
 
       try {
-        const tenantSnapshot = buildTenantIdentitySnapshot(usersQuery.data ?? []);
-        if (!tenantSnapshot) {
-          throw new Error("Tenant identity data is still loading.");
-        }
+        const tenantSnapshot = requireTenantIdentitySnapshot(usersQuery.data, usersQuery.error);
 
         const allPolicies = Object.values(drafts);
         const payload = {
@@ -125,7 +122,7 @@ export default function PolicyEditor({ policies, value, onChange }: PolicyEditor
     }, 500);
 
     return () => window.clearTimeout(timeout);
-  }, [drafts, selectedPolicy, usersQuery.data, usersQuery.loading]);
+  }, [drafts, selectedPolicy, usersQuery.data, usersQuery.error, usersQuery.loading]);
 
   function updatePolicy(patch: Partial<EditablePolicy>) {
     if (!selectedPolicy) return;

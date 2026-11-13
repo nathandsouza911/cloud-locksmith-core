@@ -51,7 +51,13 @@ class CABlockPolicyExecutor:
         return {"prior_policy": prior_policy, "_control_id": self._control_id}
 
     async def execute(self, graph_client, evidence: dict) -> dict:
-        """Apply the CA block policy for this control in enforced/full mode.
+        """Apply the CA block policy for this control, guarded by pre-flight checks.
+
+        Like CAMFAPolicyExecutor: pre-flight runs first and a failed blocking check
+        returns a blocked result with no CA mutation; the mode comes from
+        evidence["enforcement_mode"] (the finding's mode), defaulting to audit, so an
+        unspecified mode creates the policy in report-only state. (Until 2026-11-13
+        this executor hard-coded "enforced" and ran no pre-flight.)
 
         Delegates to ca_policy_engine.apply_control(), which builds the policy,
         calls apply_policy() via the adapter, and verifies inline. Returns the
@@ -59,20 +65,40 @@ class CABlockPolicyExecutor:
         envelope on success so the remediation pipeline records it correctly.
         """
         from app.services.ca_policy_engine import apply_control
+        from app.services.remediation.preflight.engine import run_preflight
+
+        ev = evidence or {}
+        tenant_id = str(getattr(graph_client.tenant, "id", "") or "")
+        report = await run_preflight(
+            graph_client=graph_client,
+            control_id=self._control_id,
+            tenant_id=tenant_id,
+            evidence=ev,
+        )
+        if not report.all_passed:
+            return {
+                "status": "blocked",
+                "reason": "preflight_failed",
+                "message": report.operator_summary,
+                "preflight_report": report.to_dict(),
+            }
 
         result = await apply_control(
             db=graph_client.db,
             tenant=graph_client.tenant,
             control_id=self._control_id,
-            mode="enforced",
-            rollout_phase="full",
+            mode=ev.get("enforcement_mode") or "audit",
+            rollout_phase=ev.get("rollout_phase") or "full",
         )
         ca_status = (result or {}).get("status")
-        if ca_status in {"blocked", "partial", "failed"}:
+        # Only the engine's success statuses are a success; anything else (blocked,
+        # partial, failed, drift_detected, ...) is returned as is.
+        if ca_status not in {"success", "no-op"}:
             return result
         return {
             "status": "SUCCESS",
             "verified": result.get("verified", True),
+            "verification_scope": result.get("verification_scope"),
             "control_id": self._control_id,
             "snapshot": {
                 "control_id": self._control_id,

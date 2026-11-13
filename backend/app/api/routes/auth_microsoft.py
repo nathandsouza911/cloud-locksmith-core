@@ -696,6 +696,19 @@ def microsoft_admin_consent_callback(
     )
 
 
+_TENANT_ALREADY_OWNED_MESSAGE = (
+    "This Microsoft tenant is already connected by another account. " "Ask that account's owner to give you access."
+)
+
+
+class _CallbackDenied(HTTPException):
+    """A callback refusal with a stable `connect_error` code the frontend can explain."""
+
+    def __init__(self, *, status_code: int, connect_error_code: str, detail: str) -> None:
+        super().__init__(status_code=status_code, detail=detail)
+        self.connect_error_code = connect_error_code
+
+
 def _connect_error_redirect(code: str, message: str | None = None) -> RedirectResponse:
     """A friendly landing spot for any onboarding failure, instead of a raw
     backend JSON error. `/tenants` is where "Add Tenant" already lives, so
@@ -931,9 +944,11 @@ async def _microsoft_oauth_callback_impl(
                     or not preview_user_oid
                     or owner_user.oid != preview_user_oid
                 ):
-                    raise HTTPException(
+                    # Never reveal who the owner is.
+                    raise _CallbackDenied(
                         status_code=403,
-                        detail="Access denied. Contact your administrator to be granted access.",
+                        connect_error_code="tenant_already_owned",
+                        detail=_TENANT_ALREADY_OWNED_MESSAGE,
                     )
             get_or_create_user_tenant_access(
                 db=db,
@@ -1022,9 +1037,10 @@ async def _microsoft_oauth_callback_impl(
                         detail=("Tenant owner requires identity migration. " "Contact support."),
                     )
                 if not smb_user_oid or owner_user.oid != smb_user_oid:
-                    raise HTTPException(
+                    raise _CallbackDenied(
                         status_code=403,
-                        detail="This tenant is already owned. Contact your administrator.",
+                        connect_error_code="tenant_already_owned",
+                        detail=_TENANT_ALREADY_OWNED_MESSAGE,
                     )
 
         # First-owner claim must be a tenant admin (parity with MSP connect).
@@ -1213,7 +1229,8 @@ async def microsoft_oauth_callback(
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, str) else "Connection failed. Please try again."
         logger.warning("microsoft_oauth_callback_failed status=%s detail=%s", exc.status_code, detail)
-        return _connect_error_redirect(code="connection_failed", message=detail)
+        code = getattr(exc, "connect_error_code", "connection_failed")
+        return _connect_error_redirect(code=code, message=detail)
 
 
 @router.get("/msp-connect/pending/{session_id}", response_model=MspConnectPendingResponse)

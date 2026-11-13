@@ -30,6 +30,7 @@ interface ControlCardProps {
 const statusStyles: Record<ControlDisplayStatus, string> = {
   NOT_CONFIGURED: "border border-gray-700 bg-gray-800/80 text-gray-300",
   PARTIAL: "border border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
+  REPORT_ONLY: "border border-sky-500/30 bg-sky-500/10 text-sky-300",
   ENFORCED: "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
   COMPLIANT: "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
 };

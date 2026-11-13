@@ -18,6 +18,17 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 logger = logging.getLogger(__name__)
 
 
+class TenantNotConnectedError(RuntimeError):
+    """The tenant has no stored Microsoft token (e.g. a Preview-only sign-in).
+
+    Subclasses RuntimeError so existing ``except RuntimeError`` handlers keep working;
+    the API maps it to 409 FULL_CONNECT_REQUIRED instead of a 500.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("Tenant has no OAuth token stored")
+
+
 class GraphAPIError(RuntimeError):
     def __init__(
         self,
@@ -167,6 +178,7 @@ def graph_error_ui_label(error_type: str | None) -> str | None:
         "INVALID_PAYLOAD": "Configuration error",
         "RESOURCE_NOT_FOUND": "Resource not found",
         BlockReason.POLICY_RESTRICTION.value: "Policy restriction",
+        BlockReason.PREFLIGHT_FAILED.value: "Pre-flight check failed",
         BlockReason.UNKNOWN.value: "Execution failed",
     }
     if not error_type:
@@ -215,7 +227,7 @@ async def validate_tenant_graph_permissions(
     missing_permission_message: str,
 ) -> dict[str, Any]:
     if not await has_delegated_oauth_token(tenant, db=db):
-        raise RuntimeError("Tenant has no OAuth token stored")
+        raise TenantNotConnectedError()
 
     access_token = await get_valid_access_token(tenant.id, db=db)
     claims = decode_access_token_claims(access_token)
@@ -341,7 +353,7 @@ async def graph_get(db, tenant: Tenant, path: str):
 
         return recorded_graph_get(tenant.id, path)
     if not await has_delegated_oauth_token(tenant, db=db):
-        raise RuntimeError("Tenant has no OAuth token stored")
+        raise TenantNotConnectedError()
 
     access_token = await get_valid_access_token(tenant.id, db=db)
     _validate_access_token_tenant(
@@ -394,7 +406,7 @@ async def get_tenant_graph_token_claims(*, db, tenant: Tenant) -> dict[str, Any]
 
 async def _graph_write_request(db, tenant: Tenant, method: str, path: str, payload: dict | None = None):
     if not await has_delegated_oauth_token(tenant, db=db):
-        raise RuntimeError("Tenant has no OAuth token stored")
+        raise TenantNotConnectedError()
 
     access_token = await get_valid_access_token(tenant.id, db=db)
     _validate_access_token_tenant(

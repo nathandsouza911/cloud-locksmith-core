@@ -50,8 +50,9 @@ the `X-Tenant-ID` header is only a selector, never trusted on its own.
 
 ## Background work
 
-`ENABLE_SCHEDULER` defaults to **true**: when the API starts it also runs the scheduler
-loop (scheduled scans, reports, campaign jobs and the auto-remediation job). The
+`ENABLE_SCHEDULER` defaults to **false**. When it is set to `true`, the API also runs the
+scheduler loop when it starts (scheduled scans, reports, campaign jobs and the
+auto-remediation job). The
 auto-remediation job does nothing unless `ENABLE_AUTO_REMEDIATION=true` (default false).
 See `remediation-lifecycle.md`.
 

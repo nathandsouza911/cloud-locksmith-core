@@ -7,6 +7,7 @@ import { ArrowRight, Shield } from "lucide-react";
 
 import { startMicrosoftOAuth, POST_LOGIN_LANDING } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
+import { signInErrorFromSearch } from "@/lib/connect-errors";
 import { DEMO_LANDING, isDemoMode, signInToDemo } from "@/lib/demo";
 
 export default function LoginPage() {
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [loginLoading, setLoginLoading] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
+  const [signInError, setSignInError] = useState<string | null>(null);
   const demo = isDemoMode();
 
   useEffect(() => {
@@ -21,6 +23,10 @@ export default function LoginPage() {
       router.replace(POST_LOGIN_LANDING);
     }
   }, [authed, loading, router]);
+
+  useEffect(() => {
+    setSignInError(signInErrorFromSearch(window.location.search));
+  }, []);
 
   if (loading) {
     return (
@@ -75,6 +81,14 @@ export default function LoginPage() {
           </>
         ) : (
           <>
+            {signInError ? (
+              <p
+                role="alert"
+                className="mb-4 rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-center text-sm text-red-400"
+              >
+                {signInError}
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={() => {

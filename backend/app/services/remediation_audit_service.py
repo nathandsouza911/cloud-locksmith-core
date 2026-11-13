@@ -119,6 +119,9 @@ def log_audit_event(
         return None
 
 
+_HUMAN_APPROVAL_MODES = frozenset({"MANUAL", "INTERACTIVE"})
+
+
 def mark_remediation_approved(
     *,
     db: Session,
@@ -132,6 +135,10 @@ def mark_remediation_approved(
 
     transition(TransitionEvent.APPROVE, finding)
     approved_at = to_naive_utc(utc_now())
+    # A person re-approving starts a fresh attempt budget; automated approvals keep
+    # the count so MAX_EXECUTION_ATTEMPTS still stops automated retry loops.
+    if approval_mode in _HUMAN_APPROVAL_MODES:
+        finding.execution_attempts = 0
 
     # H1 — capture the approved scope (server-side, from the finding's own
     # evidence) so execution can be bound to exactly what was approved. For

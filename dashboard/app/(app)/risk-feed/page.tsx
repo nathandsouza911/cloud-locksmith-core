@@ -37,7 +37,8 @@ import {
   capabilityTooltip,
   resolveControlCapabilityWithFallback,
 } from "@/lib/control-capabilities";
-import { buildTenantIdentitySnapshot } from "@/lib/simulation";
+import { requireTenantIdentitySnapshot } from "@/lib/simulation";
+import { FloatingNotice } from "@/components/ui/FloatingNotice";
 import { canSimulateFix } from "@/lib/simulate-fix-controls";
 import type {
   ComplianceResult,
@@ -283,12 +284,10 @@ function buildCapabilityActionState(
 async function buildSimulationPayload(
   risk: RiskFeedItem,
   complianceResult: ComplianceResult | null | undefined,
-  tenantUsers: DirectoryUser[],
+  tenantUsers: DirectoryUser[] | null,
+  usersError: string | null,
 ) {
-  const tenantSnapshot = buildTenantIdentitySnapshot(tenantUsers);
-  if (!tenantSnapshot) {
-    throw new Error("Tenant identity data is still loading.");
-  }
+  const tenantSnapshot = requireTenantIdentitySnapshot(tenantUsers, usersError);
 
   const evidenceRecord = getEvidenceRecord(complianceResult ?? null);
   const roleSource = getRoles({
@@ -436,7 +435,7 @@ export default function RiskFeedPage() {
     setActiveSimulationId(risk.compliance_result_id);
 
     try {
-      const payload = await buildSimulationPayload(risk, complianceResult, usersQuery.data ?? []);
+      const payload = await buildSimulationPayload(risk, complianceResult, usersQuery.data, usersQuery.error);
       await simulation.runSimulation(payload);
     } catch (error) {
       setSimulationError(error instanceof Error ? error.message : "Simulation failed");
@@ -748,9 +747,7 @@ export default function RiskFeedPage() {
         }
       />
 
-      {toast ? (
-        <Card className="border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">{toast}</Card>
-      ) : null}
+      <FloatingNotice message={toast} />
 
       {breakGlassCredentials ? (
         <div className="fixed inset-0 z-[130] flex items-center justify-center bg-gray-950/85 px-4 backdrop-blur-sm">
@@ -843,8 +840,10 @@ export default function RiskFeedPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="p-5 lg:col-span-1">
+      {/* Chart above the findings, both full width: in a side column the feed was
+          too narrow to read a finding and its fix button together. */}
+      <div className="flex flex-col gap-4" data-testid="risk-feed-layout">
+        <Card className="p-5">
           <p className="mb-4 text-sm font-semibold text-gray-200">Risk Distribution</p>
           {isLoading ? (
             <TableSkeleton rows={3} cols={1} />
@@ -887,7 +886,7 @@ export default function RiskFeedPage() {
           )}
         </Card>
 
-        <Card className="overflow-hidden lg:col-span-2">
+        <Card className="overflow-hidden">
           <div className="flex flex-col justify-between gap-3 border-b border-gray-800 px-5 py-4 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2">
               <Zap size={14} className="text-yellow-400" />
