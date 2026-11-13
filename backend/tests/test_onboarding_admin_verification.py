@@ -7,6 +7,8 @@ successfully.
 """
 
 import asyncio
+import importlib
+import pkgutil
 from urllib.parse import parse_qs, urlparse
 
 from sqlalchemy import create_engine
@@ -20,6 +22,13 @@ from app.db.models.user_tenant_access import UserTenantAccess, UserTenantRole
 
 
 def _make_session():
+    # Import every model so create_all can resolve all foreign keys even when this
+    # file runs on its own (it used to rely on other test files' imports).
+    import app.db.models as model_package
+
+    for module_info in pkgutil.iter_modules(model_package.__path__):
+        importlib.import_module(f"app.db.models.{module_info.name}")
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine)()

@@ -38,6 +38,7 @@ import { PreviewModeBanner } from "@/components/ui/PreviewModeBanner";
 import { useBreakGlassEvents } from "@/lib/api/hooks";
 import { useAuth } from "@/lib/auth-context";
 import { startMicrosoftOAuth } from "@/lib/auth";
+import { loginPathKeepingConnectError } from "@/lib/connect-errors";
 
 // Sprint 1 — navigation is organised by WORK, not by data category
 // (Product Bible §14). "My Work" leads; the posture Dashboard is demoted under
@@ -118,7 +119,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!loading && !authed) {
-      router.replace("/login");
+      // Keep a sign-in failure code (e.g. a refused Microsoft callback) so /login can explain it.
+      router.replace(loginPathKeepingConnectError(window.location.search));
     }
   }, [loading, authed, router]);
 
