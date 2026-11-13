@@ -48,6 +48,18 @@
 * The Users page shows each user's last sign-in (it showed "No recent activity" for
   everyone).
 * The sidebar and the page content scroll independently.
+* Refused fixes say why (expired approval, re-approval required, licence) instead of
+  "Invalid remediation request", and a refusal by a pre-flight check is recorded with its
+  reason in the finding and the audit trail.
+* After three attempts a finding could never be fixed again, even after re-approval. A
+  person's approval now starts a fresh set of attempts (automated approvals do not).
+* A fixed finding no longer keeps an "Execution failed" label from earlier attempts.
+* Remediation History lists Conditional Access fixes (with rollback), once per finding.
+* Security Controls shows a report-only Conditional Access policy as "Report only".
+* The sign-in scan no longer takes minutes on tenants with users who have no mailbox:
+  inbox rules are read in parallel with a short limit per user.
+* Risk Feed shows the risk distribution above the findings, so the findings use the full
+  width.
 
 ## 0.1.0 (2026-11-12)
 
