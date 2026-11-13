@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.current_user import get_current_tenant_with_fresh_auth, require_write_access
-from app.db.models.compliance_result import ComplianceResult, ExposureStatus
+from app.db.models.compliance_result import ExposureStatus
 from app.db.models.control_execution import ControlExecution, ControlExecutionStatus
 from app.db.models.remediation_snapshot import RemediationSnapshot
 from app.db.models.remediation_audit import RemediationAuditLog
@@ -16,6 +16,7 @@ from app.services.remediation.lifecycle import (
     reconcile_rolled_back_state,
 )
 from app.services.posture_snapshot_service import create_posture_snapshot
+from app.services.remediation.finding_lock import FindingBusyError, lock_finding_nowait
 from app.services.ca_policy_engine import normalize_control_id, rollback_control_dispatch
 from app.services.remediation.admin_roles.admin_role_rollback import rollback_admin_roles
 from app.services.remediation.control_registry import CONTROL_REGISTRY, get_control_capabilities
@@ -65,15 +66,10 @@ async def rollback_remediation(
     requested_by = payload.get("requested_by", "ui")
     execution_id = payload.get("execution_id")
 
-    compliance = (
-        db.query(ComplianceResult)
-        .filter(
-            ComplianceResult.id == compliance_result_id,
-            ComplianceResult.tenant_id == current_tenant.id,
-        )
-        .with_for_update()
-        .one_or_none()
-    )
+    try:
+        compliance = lock_finding_nowait(db, compliance_result_id=compliance_result_id, tenant_id=current_tenant.id)
+    except FindingBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     if not compliance:
         raise HTTPException(status_code=404, detail="Compliance result not found")

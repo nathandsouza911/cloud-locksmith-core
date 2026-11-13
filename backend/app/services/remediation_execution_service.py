@@ -20,6 +20,7 @@ from app.services.graph_client import (
     graph_error_ui_label,
 )
 from app.services.remediation_executor import execute_remediation
+from app.services.remediation.finding_lock import FindingBusyError, lock_finding_nowait
 from app.services.remediation.approval_binding import (
     ApprovalScopeError,
     assert_execution_within_approved_scope,
@@ -110,15 +111,10 @@ async def execute_approved_remediation(
 
     execution_payload = execution_payload or {}
 
-    compliance = (
-        db.query(ComplianceResult)
-        .filter(
-            ComplianceResult.id == compliance_result_id,
-            ComplianceResult.tenant_id == tenant_id,
-        )
-        .with_for_update()
-        .one_or_none()
-    )
+    try:
+        compliance = lock_finding_nowait(db, compliance_result_id=compliance_result_id, tenant_id=tenant_id)
+    except FindingBusyError:
+        return {"status": "already_executing"}
 
     if not compliance:
         raise ValueError("Compliance result not found")
