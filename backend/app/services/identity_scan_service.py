@@ -717,6 +717,27 @@ _AUTHORIZATION_POLICY_CONTROLS = {
 }
 
 
+async def _fetch_privileged_role_assignments(db: AsyncSession, tenant) -> list[dict]:
+    """Active assignments to the privileged roles, one Graph query per role.
+
+    Graph rejects ``roleDefinitionId in (...)`` on this endpoint ("Multiple
+    roleDefinitionId in filter not supported"); ``roleDefinitionId eq '<id>'`` is the
+    documented form. Any failed query raises, so a role is never silently skipped.
+    """
+    assignments: list[dict] = []
+    for role_definition_id in sorted(_PERMANENT_ROLE_TARGET_IDS):
+        assignments.extend(
+            await graph_get_all(
+                db,
+                tenant,
+                "/roleManagement/directory/roleAssignments"
+                "?$select=id,principalId,roleDefinitionId,directoryScopeId"
+                f"&$filter=roleDefinitionId eq '{role_definition_id}'",
+            )
+        )
+    return assignments
+
+
 async def run_tenant_controls(
     db: AsyncSession,
     tenant,
@@ -846,13 +867,7 @@ async def run_tenant_controls(
     # Permanent role assignment scan — fail-open; per-user findings.
     if "IDENTITY_PERMANENT_ROLE_ASSIGNMENT" in baseline_controls:
         try:
-            role_assignments = await graph_get_all(
-                db,
-                tenant,
-                "/roleManagement/directory/roleAssignments"
-                "?$select=id,principalId,roleDefinitionId,directoryScopeId"
-                f"&$filter=roleDefinitionId in ({','.join(repr(rid) for rid in _PERMANENT_ROLE_TARGET_IDS)})",
-            )
+            role_assignments = await _fetch_privileged_role_assignments(db, tenant)
             try:
                 eligible_schedules = await graph_get_all(
                     db,
