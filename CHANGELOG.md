@@ -35,6 +35,12 @@
   Report-only fixes are verified as "report-only" and leave the finding open.
 * A Conditional Access fix whose verification failed can now be rolled back, and rolling
   back a Conditional Access fix from the dashboard works (it always failed before).
+* Two simultaneous fix or rollback requests for the same finding froze the whole API.
+  The second request is now refused at once ("already executing", or 409 for rollback).
+* The device code flow and authentication transfer fixes were always applied as
+  enforced, without the break-glass check. They now follow the finding's mode
+  (report-only by default) and run the break-glass check first, like the other
+  Conditional Access fixes.
 
 ## 0.1.0 (2026-11-12)
 
