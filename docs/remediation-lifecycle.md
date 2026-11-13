@@ -1,8 +1,10 @@
 # Remediation lifecycle
 
 Which controls can be fixed, rolled back or verified is listed in `controls.md`.
-No fix described here has been executed against a real tenant from this codebase yet;
-the behaviour below is what the code implements and what its tests cover.
+The behaviour below is what the code implements and what its tests cover. On a real
+developer tenant (2026-11-13) one Conditional Access fix, *Block legacy authentication*
+in report-only mode, was run through approve, execute, verify and roll back, together with
+the refusals described here (`connect-a-real-tenant.md` lists exactly what was run).
 
 ## 1. Detect
 
@@ -35,7 +37,19 @@ refuses to run unless all of these hold:
 * break-glass and other protected accounts are not the target;
 * for the CA controls, the preflight checks pass (`services/remediation/preflight/`);
 * no other remediation is running for the tenant (Postgres advisory lock) and the finding
-  was not remediated in the last 30 minutes.
+  was not remediated in the last 30 minutes;
+* the finding has not used up its three execution attempts. A person's approval starts a
+  fresh set of attempts; automated approvals do not.
+
+A second request for a finding that is already executing is refused at once ("already
+executing"). A refusal is recorded on the finding and in the audit trail with its reason,
+and the API returns that reason (for example an expired approval).
+
+Conditional Access fixes run in the finding's mode, which defaults to **report-only**: the
+policy logs what it would block and enforces nothing. Every policy excludes the registered
+break-glass accounts. The licence check for Conditional Access creates and immediately
+deletes a temporary report-only policy; it runs only after the pre-flight and break-glass
+checks pass.
 
 A snapshot of the state before the change is stored for rollback.
 
@@ -45,10 +59,22 @@ Where the control has a verifier, the result is read back from Graph after the c
 A fix only counts as successful when the executor reports success **and** verification
 passes; otherwise the finding is marked failed.
 
+For Conditional Access, verification checks that the managed policy exists exactly as
+intended (empty fields Graph adds are ignored). An **enforced** policy must also make the
+control pass. A **report-only** policy is recorded as verified *report-only* and the
+finding stays open, because a report-only policy protects no one.
+
 ## 6. Roll back
 
 Controls with rollback restore the stored snapshot (for example the previous Conditional
-Access policy or the removed role assignments). Rollback is also audited.
+Access policy or the removed role assignments). Rollback is also audited, and needs the
+same fresh Microsoft sign-in (24 h) as executing.
+
+A Conditional Access fix can also be rolled back when its verification failed, since the
+change was made and its snapshot exists. The server finds the change to undo itself,
+within the requesting tenant. If Graph fails partway through a rollback, the API returns
+502 `rollback_incomplete`, the failure is audited, and retrying the rollback restores the
+snapshot.
 
 ## Automatic remediation (off by default)
 

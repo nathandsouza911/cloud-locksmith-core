@@ -3,12 +3,24 @@
 This runs Cloud Locksmith Core locally against your own Microsoft 365 tenant. Start with
 a test or developer tenant.
 
-**What has been verified.** On 2026-11-12 this flow was run against a licensed developer
-tenant with the predecessor of this codebase (the same scan, scoring and simulation code,
-before the open-source clean-up). It covered the Preview sign-in and scan, a full
-connect, and the Settings fix simulation, with no fix executed. This exported codebase
-has not yet been run against a real tenant. The known issues at the end were found in
-that run.
+**What has been verified.** On 2026-11-13 this codebase (with the fixes listed under
+*Unreleased* in `CHANGELOG.md`) was run against a licensed developer tenant with the
+owner present:
+
+* Full connect and the sign-in scan.
+* One Conditional Access fix, *Block legacy authentication*, applied as a **report-only**
+  policy: approved, executed, verified as report-only, rolled back, and applied and rolled
+  back again. The tenant ended with the same Conditional Access policies it started with.
+* Refusals that change nothing: a fix with no registered break-glass account, an expired
+  approval (older than 48 h), a rollback without a Microsoft sign-in in the last 24 h,
+  and two simultaneous executes of the same fix (one runs, the other is refused).
+* A read-only check of stale service principals, service-account interactive login and
+  the two risk-based Conditional Access controls.
+
+Not run against a real tenant: any **enforced** Conditional Access fix, any fix other than
+*Block legacy authentication*, and the fixes that change users, roles or app consents.
+Earlier, on 2026-11-12, the predecessor of this codebase ran the Preview sign-in, scan and
+fix simulation; the issues found then are fixed.
 
 ## 1. Register an app in Entra
 
@@ -65,8 +77,9 @@ Open http://localhost:3000.
 1. Go to http://localhost:3000/preview-login and sign in with a **Global Administrator**
    of the tenant, then accept the consent screen. Preview requests read-only scopes, gives
    READ_ONLY access, and does not store the token.
-2. The scan runs during the sign-in callback, so the page can take 1–3 minutes. Don't
-   refresh it. You then land on the dashboard with a posture score and findings.
+2. The scan runs during the sign-in callback, so the page can take a minute or more on a
+   larger tenant (about 50 seconds for 14 users and 337 service principals). Don't refresh
+   it. You then land on the dashboard with a posture score and findings.
 
 ## 6. Full connect
 
@@ -79,28 +92,61 @@ and makes your account the tenant **owner**, bound to your Entra object ID (`oid
   is failing. If your tenant already enforces MFA through Conditional Access, it won't
   appear.
 * **Settings → Simulation → Simulate Fix:** simulates `CA_MFA_ALL_USERS` against your
-  directory. This needs the full connect (step 6); it does not work after Preview only
-  (see known issues).
+  directory. This needs the full connect (step 6); after a Preview sign-in only, it says
+  that a full connect is required.
 
 Simulation is a calculation and changes nothing. Executing a fix changes the tenant: see
 `remediation-lifecycle.md` before you approve or execute anything.
 
+## 8. Apply a Conditional Access fix (changes the tenant)
+
+Before the first Conditional Access fix:
+
+* **Security defaults must be off.** Entra does not allow Conditional Access policies
+  while they are on, so every Conditional Access fix fails. Turn them back on afterwards
+  if you rely on them.
+* **Register at least one break-glass account.** The pre-flight check refuses any
+  Conditional Access fix until the product knows at least one break-glass account, and
+  every policy it creates excludes those accounts. See the known issue below for
+  registering an account that already exists.
+
+Then use **Risk Feed** (or **Security Controls**) → **Review & Fix**. This approves and
+executes in one step, after the pre-flight checks. The policy is created in
+**report-only** mode (the finding's default mode): it logs what it would block and enforces
+nothing, so the finding stays open in the score. Roll it back from **Remediation History**.
+
 ## Owner binding
 
 Once a tenant has an owner, a Preview or full-connect sign-in by a different Microsoft
-account is refused (403). Today the dashboard then shows the plain login page with no
-message (see known issues). To start over on a local install, drop the database volume
+account is refused, and the login page says the tenant is already connected to another
+account. To start over on a local install, drop the database volume
 (`docker compose down -v` in `backend/`), which deletes all local data.
 
-## Known issues (seen in the 2026-11-12 run)
+## Known issues (seen in the 2026-11-13 run)
 
-* `IDENTITY_STALE_SERVICE_PRINCIPAL` findings fail to save
-  (`unsupported resource_type for finding: SERVICE_PRINCIPAL`).
-* `IDENTITY_PERMANENT_ROLE_ASSIGNMENT`: Graph rejects the role-assignment filter
-  (`Multiple roleDefinitionId in filter not supported`).
-* After a Preview sign-in only, `/api/v1/users` returns 500 (no stored token), so the
-  Settings simulation is unavailable until a full connect.
-* The owner-binding 403 lands on a bare `/login` page without an explanation.
+* **No way to register an existing break-glass account.** The pre-flight check reads the
+  product's own list of break-glass accounts, and only the *create break-glass accounts*
+  fix adds to it (by creating new accounts). For a local install you can add an existing
+  account directly; use its Entra object ID and your tenant ID:
+
+  ```
+  docker compose exec postgres psql -U postgres -d cloudlocksmith -c \
+    "insert into break_glass_accounts (tenant_id, user_external_id, created_at)
+     values ('<tenant-id>', '<break-glass-object-id>', now());"
+  ```
+
+  The pre-flight check still confirms with Microsoft that the account is an active
+  Global Administrator.
+* **Enforcing a Conditional Access fix is not available in the dashboard.** Fixes run in
+  the finding's mode, which defaults to report-only.
+* **Stale service principals** use Microsoft's service-principal sign-in report, a beta
+  Graph endpoint that lags by about a day: an app first used today can appear as never
+  signed in until the report catches up.
+* **Mail-forwarding rules** cannot be read for users without an Exchange Online licence;
+  those users are skipped and logged, not reported.
+* The "found something" paths of the service-account and risk-based Conditional Access
+  controls were not seen on a real tenant (the test tenant had no such accounts or
+  policies); they are covered by unit tests.
 
 ## Troubleshooting
 
