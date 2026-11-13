@@ -37,7 +37,7 @@ import {
   capabilityTooltip,
   resolveControlCapabilityWithFallback,
 } from "@/lib/control-capabilities";
-import { buildTenantIdentitySnapshot } from "@/lib/simulation";
+import { requireTenantIdentitySnapshot } from "@/lib/simulation";
 import { canSimulateFix } from "@/lib/simulate-fix-controls";
 import type {
   ComplianceResult,
@@ -283,12 +283,10 @@ function buildCapabilityActionState(
 async function buildSimulationPayload(
   risk: RiskFeedItem,
   complianceResult: ComplianceResult | null | undefined,
-  tenantUsers: DirectoryUser[],
+  tenantUsers: DirectoryUser[] | null,
+  usersError: string | null,
 ) {
-  const tenantSnapshot = buildTenantIdentitySnapshot(tenantUsers);
-  if (!tenantSnapshot) {
-    throw new Error("Tenant identity data is still loading.");
-  }
+  const tenantSnapshot = requireTenantIdentitySnapshot(tenantUsers, usersError);
 
   const evidenceRecord = getEvidenceRecord(complianceResult ?? null);
   const roleSource = getRoles({
@@ -436,7 +434,7 @@ export default function RiskFeedPage() {
     setActiveSimulationId(risk.compliance_result_id);
 
     try {
-      const payload = await buildSimulationPayload(risk, complianceResult, usersQuery.data ?? []);
+      const payload = await buildSimulationPayload(risk, complianceResult, usersQuery.data, usersQuery.error);
       await simulation.runSimulation(payload);
     } catch (error) {
       setSimulationError(error instanceof Error ? error.message : "Simulation failed");

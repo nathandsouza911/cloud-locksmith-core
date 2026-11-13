@@ -2,6 +2,7 @@ import logging
 import uvicorn
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from app.api.v1 import auth, health, session, tenants
 from app.config import settings
@@ -10,7 +11,7 @@ from app.middleware.tenant_context import TenantContextMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.core.redis_client import verify_redis_available_in_production
 from app.services.auth.jwt_service import decode_access_token
-from app.services.graph_client import verify_graph_remediation_permissions_startup
+from app.services.graph_client import TenantNotConnectedError, verify_graph_remediation_permissions_startup
 from app.db.models.compliance_result import ComplianceResult
 from app.db.models.control_execution import ControlExecution
 from app.db.models.control_snapshot import ControlSnapshot
@@ -29,6 +30,21 @@ if settings.DEMO_MODE:
 
 app = FastAPI(title=settings.APP_NAME, version="0.1.0")
 logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(TenantNotConnectedError)
+async def _tenant_not_connected_handler(request: Request, exc: TenantNotConnectedError):
+    # A Preview-only sign-in stores no Microsoft token; say so instead of returning 500.
+    return JSONResponse(
+        status_code=409,
+        content={
+            "error": "FULL_CONNECT_REQUIRED",
+            "detail": "This needs a full connect to Microsoft. Preview sign-in does not store "
+            "a token, so live directory data is unavailable. Run the full connect from Tenants.",
+        },
+    )
+
+
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 

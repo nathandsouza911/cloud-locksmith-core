@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import SettingsPage from "../page";
 
 // ── External mocks ────────────────────────────────────────────────────────────
@@ -65,16 +65,14 @@ jest.mock("@/lib/api/hooks", () => ({
     loading: false,
     result: null,
   }),
-  useUsers: () => ({
-    data: [],
-    loading: false,
-    error: null,
-  }),
+  useUsers: () => mockUsersState,
 }));
 
-jest.mock("@/lib/simulation", () => ({
-  buildTenantIdentitySnapshot: jest.fn(),
-}));
+let mockUsersState: { data: unknown[] | null; loading: boolean; error: string | null } = {
+  data: [],
+  loading: false,
+  error: null,
+};
 
 jest.mock("@/lib/api/endpoints", () => ({
   deleteTenant: jest.fn(),
@@ -104,6 +102,7 @@ function authWith(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   mockUseAuth.mockReturnValue(authWith());
+  mockUsersState = { data: [], loading: false, error: null };
 });
 
 // ── Tests: removed elements (RED on current, GREEN on new) ───────────────────
@@ -186,6 +185,17 @@ describe("kept elements — always visible", () => {
   test("renders Simulate Fix button", () => {
     renderSettings();
     expect(screen.getByRole("button", { name: /simulate fix/i })).toBeInTheDocument();
+  });
+
+  test("Simulate Fix shows why users are unavailable instead of 'still loading'", async () => {
+    const reason = "This needs a full connect to Microsoft.";
+    mockUsersState = { data: null, loading: false, error: reason };
+    renderSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: /simulate fix/i }));
+
+    expect(await screen.findByText(reason)).toBeInTheDocument();
+    expect(screen.queryByText(/still loading/i)).not.toBeInTheDocument();
   });
 
   test("renders Sign Out button", () => {
