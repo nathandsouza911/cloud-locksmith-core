@@ -38,6 +38,7 @@ import {
   resolveControlCapabilityWithFallback,
 } from "@/lib/control-capabilities";
 import { requireTenantIdentitySnapshot } from "@/lib/simulation";
+import { FloatingNotice } from "@/components/ui/FloatingNotice";
 import { canSimulateFix } from "@/lib/simulate-fix-controls";
 import type {
   ComplianceResult,
@@ -746,9 +747,7 @@ export default function RiskFeedPage() {
         }
       />
 
-      {toast ? (
-        <Card className="border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">{toast}</Card>
-      ) : null}
+      <FloatingNotice message={toast} />
 
       {breakGlassCredentials ? (
         <div className="fixed inset-0 z-[130] flex items-center justify-center bg-gray-950/85 px-4 backdrop-blur-sm">

@@ -11,6 +11,8 @@ export class ApiError extends Error {
   }
 }
 
+const DEMO_DISABLED_DETAIL = "disabled_in_demo_mode";
+
 interface RequestOptions {
   omitTenantHeader?: boolean;
 }
@@ -78,6 +80,11 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
 
     if (res.status === 403 && !message) {
       message = "Access denied";
+    }
+    if (res.status === 403 && message === DEMO_DISABLED_DETAIL) {
+      // Demo mode refuses every change; say so in plain words (see backend app/demo).
+      errorCode = DEMO_DISABLED_DETAIL;
+      message = "Changes are disabled in the demo. Connect your own tenant to apply fixes.";
     }
     if (res.status === 400 && message.includes("X-Tenant-ID")) {
       message = "Select a tenant to continue";
