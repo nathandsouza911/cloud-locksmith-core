@@ -63,6 +63,18 @@ MAX_WEEKLY_REMEDIATIONS = 20
 MAX_EXECUTION_ATTEMPTS = 3
 MANUAL_RETRYABLE_STATES = {"FAILED"}
 APPROVAL_EXPIRY = timedelta(hours=48)
+
+
+class RemediationRequestRefused(ValueError):
+    """A refusal whose message is fixed text written for the user (expired approval,
+    missing licence, wrong state). The API returns it with its code; other
+    ValueErrors get a generic message so internal detail never leaks."""
+
+    def __init__(self, message: str, *, code: str):
+        super().__init__(message)
+        self.code = code
+
+
 AUTHORIZATION_POLICY_PERMISSION_MESSAGE = (
     f"Missing required permission: {REQUIRED_AUTHORIZATION_POLICY_SCOPE}. " "Please reconnect tenant."
 )
@@ -180,7 +192,7 @@ async def execute_approved_remediation(
         return {"status": "already_resolved"}
 
     if remediation_status == "BLOCKED":
-        raise ValueError("BLOCKED remediations cannot be auto-executed")
+        raise RemediationRequestRefused("BLOCKED remediations cannot be auto-executed", code="BLOCKED")
 
     if (compliance.execution_attempts or 0) >= MAX_EXECUTION_ATTEMPTS:
         return _mark_execution_failed(
@@ -191,15 +203,19 @@ async def execute_approved_remediation(
         )
 
     if remediation_status == "PENDING":
-        raise ValueError("Remediation must be approved before execution")
+        raise RemediationRequestRefused("Remediation must be approved before execution", code="APPROVAL_REQUIRED")
     if remediation_status in MANUAL_RETRYABLE_STATES:
-        raise ValueError("FAILED remediations must be re-approved before retry")
+        raise RemediationRequestRefused(
+            "FAILED remediations must be re-approved before retry", code="REAPPROVAL_REQUIRED"
+        )
     if remediation_status == "IGNORED":
-        raise ValueError("IGNORED findings must be unignored before execution")
+        raise RemediationRequestRefused("IGNORED findings must be unignored before execution", code="IGNORED")
     elif remediation_status == "EXECUTING":
         return {"status": "already_executing"}
     elif remediation_status not in {"APPROVED", "SUCCESS"}:
-        raise ValueError(f"Remediation cannot execute from state {remediation_status}")
+        raise RemediationRequestRefused(
+            f"Remediation cannot execute from state {remediation_status}", code="INVALID_STATE"
+        )
 
     # ── Approval expiry check ────────────────────────────────────────────────
     # Approvals expire after APPROVAL_EXPIRY (48 h). If the approval is stale,
@@ -222,7 +238,7 @@ async def execute_approved_remediation(
                 compliance_result_id,
                 tenant_id,
             )
-            raise ValueError("No approval record found — re-approval required")
+            raise RemediationRequestRefused("No approval record found — re-approval required", code="APPROVAL_REQUIRED")
 
         approval_age = utc_now() - ensure_utc(latest_approval.approved_at)
         if approval_age > APPROVAL_EXPIRY:
@@ -240,7 +256,10 @@ async def execute_approved_remediation(
             ev["approval_expired_at"] = utc_now().isoformat()
             compliance.evidence = ev
             db.commit()
-            raise ValueError(f"Approval expired ({hours_old}h old, limit is 48h). Re-approval required.")
+            raise RemediationRequestRefused(
+                f"Approval expired ({hours_old}h old, limit is 48h). Re-approval required.",
+                code="APPROVAL_EXPIRED",
+            )
 
     # --------------------------------
     # Idempotent Execution Guard
@@ -433,9 +452,13 @@ async def execute_approved_remediation(
                 tenant=tenant,
             )
         except Exception as exc:
-            raise ValueError("Unable to verify Azure AD Premium P1 license") from exc
+            raise RemediationRequestRefused(
+                "Unable to verify Azure AD Premium P1 license", code="LICENSE_CHECK_FAILED"
+            ) from exc
         if not control_license_satisfied(compliance.control_id, tenant_license):
-            raise ValueError(f"Azure AD Premium {required_license_tier(compliance.control_id)} required")
+            raise RemediationRequestRefused(
+                f"Azure AD Premium {required_license_tier(compliance.control_id)} required", code="LICENSE_REQUIRED"
+            )
 
     # --------------------------------
     # Break-glass safety (MFA only)
@@ -541,8 +564,27 @@ async def execute_approved_remediation(
             evidence["error_label"] = graph_error_ui_label(blocked_reason)
             evidence["last_execution_failure_type"] = blocked_reason
             evidence["execution_attempts"] = compliance.execution_attempts or 0
+            if isinstance(execution_result.get("preflight_report"), dict):
+                evidence["preflight_report"] = execution_result["preflight_report"]
             compliance.evidence = evidence
             compliance.block_reason = blocked_reason
+            # Record the refusal and why: without this the audit trail showed only
+            # EXECUTE_STARTED for a refused fix (live run 2026-11-13, L6).
+            log_audit_event(
+                db=db,
+                tenant_id=compliance.tenant_id,
+                compliance_result_id=compliance.id,
+                control_id=compliance.control_id,
+                resource_type=compliance.resource_type,
+                resource_id=compliance.resource_id,
+                event_type="BLOCKED",
+                confidence=1.0,
+                metadata={
+                    "block_reason": blocked_reason,
+                    "reason": execution_result.get("reason"),
+                    "message": str(blocked_message),
+                },
+            )
             if should_enter_blocked_state(blocked_reason):
                 transition(TransitionEvent.PERMISSION_BLOCK, compliance)
             else:
@@ -588,7 +630,10 @@ async def execute_approved_remediation(
             compliance.resolved_at = to_naive_utc(utc_now())
             compliance.resolved_by = normalize_resolution_source(ResolutionSource.SYSTEM)
         evidence = dict(compliance.evidence or {})
-        evidence.pop("last_execution_error", None)
+        # Clear every failure marker from earlier attempts, not only the message,
+        # or the UI keeps showing "Execution failed" on a successful fix.
+        for stale_key in ("last_execution_error", "error_type", "error_label", "last_execution_failure_type"):
+            evidence.pop(stale_key, None)
         if report_only:
             evidence["report_only_policy_applied"] = True
             evidence["report_only_verified_at"] = utc_now().isoformat()

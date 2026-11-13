@@ -178,6 +178,7 @@ def graph_error_ui_label(error_type: str | None) -> str | None:
         "INVALID_PAYLOAD": "Configuration error",
         "RESOURCE_NOT_FOUND": "Resource not found",
         BlockReason.POLICY_RESTRICTION.value: "Policy restriction",
+        BlockReason.PREFLIGHT_FAILED.value: "Pre-flight check failed",
         BlockReason.UNKNOWN.value: "Execution failed",
     }
     if not error_type:
