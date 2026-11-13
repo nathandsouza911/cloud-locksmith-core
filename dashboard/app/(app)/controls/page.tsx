@@ -150,6 +150,11 @@ function deriveControlStatus(
   if (state?.status === "error" || state?.rollout_phase === "partial") {
     return "PARTIAL";
   }
+  // Checked before the failing-finding rule: a report-only policy leaves the finding
+  // failing on purpose, but the fix is in place.
+  if (state?.status === "active" && state.mode === "audit" && (state.managed_policy_ids?.length ?? 0) > 0) {
+    return "REPORT_ONLY";
+  }
   if (controlFindings.length > 0) {
     return "NOT_CONFIGURED";
   }

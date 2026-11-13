@@ -72,6 +72,7 @@ export interface ControlStateDetails {
   target_group_id: string | null;
   policy_version: number;
   status: string;
+  managed_policy_ids?: string[];
   last_applied_at: string | null;
   created_at: string | null;
   updated_at: string | null;

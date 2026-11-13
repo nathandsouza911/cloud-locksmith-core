@@ -12,7 +12,9 @@ import type { ComplianceResult, ControlCapabilityDecision } from "@/types";
 // Display-status type
 // ---------------------------------------------------------------------------
 
-export type ControlDisplayStatus = "NOT_CONFIGURED" | "PARTIAL" | "ENFORCED" | "COMPLIANT";
+// REPORT_ONLY: the engine manages a report-only CA policy. It logs what it would
+// block and enforces nothing, so the finding stays failing (live run L17).
+export type ControlDisplayStatus = "NOT_CONFIGURED" | "PARTIAL" | "REPORT_ONLY" | "ENFORCED" | "COMPLIANT";
 
 // ---------------------------------------------------------------------------
 // Non-CA controls (IDENTITY_*): status derived from compliance results only.
@@ -78,6 +80,16 @@ export function buildControlButtonState(
   capability: ControlCapabilityDecision | undefined,
   status: ControlDisplayStatus = "NOT_CONFIGURED",
 ): ControlButtonState {
+  if (status === "REPORT_ONLY") {
+    return {
+      buttonLabel: "Report-only applied",
+      buttonDisabled: true,
+      buttonTooltip:
+        "A report-only policy is in place: it logs what it would block and enforces nothing. Roll it back from Remediation History.",
+      capabilityNotes: null,
+    };
+  }
+
   // COMPLIANT: the finding already passed -- no action available.
   if (status === "COMPLIANT") {
     return {

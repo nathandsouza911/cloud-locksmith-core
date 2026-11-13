@@ -113,6 +113,7 @@ async def get_control_state_endpoint(
                 "target_group_id": state.target_group_id,
                 "policy_version": state.policy_version,
                 "status": state.status,
+                "managed_policy_ids": list(state.managed_policy_ids or []),
                 "last_applied_at": (state.last_applied_at.isoformat() if state.last_applied_at else None),
                 "created_at": state.created_at.isoformat() if state.created_at else None,
                 "updated_at": state.updated_at.isoformat() if state.updated_at else None,
