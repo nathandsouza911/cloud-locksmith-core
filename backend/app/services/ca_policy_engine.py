@@ -960,8 +960,12 @@ async def apply_control(
     )
     normalized_expected_policies = [_normalize_policy(desired_policy)]
 
+    # Drift / no-op only make sense when the engine manages a policy. With none (first
+    # apply, or after a rollback emptied managed_policy_ids) the policy is created
+    # below; otherwise a rolled-back control could never be applied again.
     if (
         current_state is not None
+        and current_managed_policy_ids
         and current_state.mode == requested_mode
         and current_state.rollout_phase == requested_rollout_phase
         and current_state.rollout_percentage == requested_rollout_percentage

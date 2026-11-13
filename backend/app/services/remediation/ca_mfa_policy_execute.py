@@ -106,7 +106,9 @@ class CAMFAPolicyExecutor:
             rollout_phase=rollout_phase,
         )
         ca_status = (result or {}).get("status")
-        if ca_status in {"blocked", "partial", "failed"}:
+        # Only the engine's success statuses are a success; anything else (blocked,
+        # partial, failed, drift_detected, ...) is returned as is.
+        if ca_status not in {"success", "no-op"}:
             return result
         return {
             "status": "SUCCESS",

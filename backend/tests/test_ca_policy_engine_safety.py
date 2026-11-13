@@ -200,6 +200,8 @@ def test_admin_mfa_noop_uses_full_privileged_role_baseline():
     mock_state.rollout_percentage = 0
     mock_state.target_group_id = None
     mock_state.policy_version = 1
+    # drift / no-op compare a policy the engine already manages
+    mock_state.managed_policy_ids = ["managed-policy"]
     mock_state.status = "active"
 
     mock_tenant = MagicMock()
@@ -707,6 +709,8 @@ def test_guest_mfa_noop_uses_existing_lifecycle():
     mock_state.rollout_percentage = 0
     mock_state.target_group_id = None
     mock_state.policy_version = 1
+    # drift / no-op compare a policy the engine already manages
+    mock_state.managed_policy_ids = ["managed-policy"]
     mock_state.status = "active"
 
     mock_tenant = MagicMock()

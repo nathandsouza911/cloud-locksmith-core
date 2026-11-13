@@ -203,6 +203,8 @@ class TestCaDriftHandling:
         mock_state.rollout_percentage = 100
         mock_state.target_group_id = None
         mock_state.policy_version = 1
+        # drift / no-op compare a policy the engine already manages
+        mock_state.managed_policy_ids = ["managed-policy"]
 
         mock_tenant = MagicMock()
         mock_tenant.id = "tenant-123"
@@ -244,6 +246,8 @@ class TestCaDriftHandling:
         mock_state.rollout_percentage = 100
         mock_state.target_group_id = None
         mock_state.policy_version = 1
+        # drift / no-op compare a policy the engine already manages
+        mock_state.managed_policy_ids = ["managed-policy"]
         mock_state.status = "success"
 
         mock_tenant = MagicMock()
