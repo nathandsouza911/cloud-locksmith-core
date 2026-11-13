@@ -1,6 +1,7 @@
 import logging
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from app.services.ca_policy_states import CA_POLICY_STATES
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +62,8 @@ class ConditionalAccessPolicySchema(BaseModel):
 
     @model_validator(mode="after")
     def validate_state(self):
-        if self.state not in {"enabled", "reportOnly", "disabled"}:
-            raise ValueError("Conditional Access state must be enabled, reportOnly, or disabled")
+        if self.state not in CA_POLICY_STATES:
+            raise ValueError("Conditional Access state must be enabled, disabled, or enabledForReportingButNotEnforced")
         return self
 
 

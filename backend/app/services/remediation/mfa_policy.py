@@ -1,3 +1,4 @@
+from app.services.ca_policy_states import CA_STATE_REPORT_ONLY
 from app.services.policy_hashing import compute_policy_hash
 from app.services.detection.conditional_access.constants import (
     AUTHENTICATION_TRANSFER_METHOD,
@@ -15,10 +16,8 @@ PRIVILEGED_ROLE_IDS = PRIVILEGED_ROLE_TEMPLATE_IDS
 
 
 def _policy_state(enforcement_mode: str | None, default_state: str) -> str:
-    if enforcement_mode == "REPORT_ONLY":
-        return "reportOnly"
-    if enforcement_mode == "AUDIT":
-        return "reportOnly"
+    if enforcement_mode in {"REPORT_ONLY", "AUDIT"}:
+        return CA_STATE_REPORT_ONLY
     if enforcement_mode == "ENFORCED":
         return "enabled"
     return default_state
@@ -27,7 +26,7 @@ def _policy_state(enforcement_mode: str | None, default_state: str) -> str:
 def build_mfa_all_users_policy(*, enforcement_mode: str | None = None, exclude_users: list[str] | None = None):
     return {
         "displayName": MFA_ALL_USERS_POLICY_NAME,
-        "state": _policy_state(enforcement_mode, "reportOnly"),
+        "state": _policy_state(enforcement_mode, CA_STATE_REPORT_ONLY),
         "conditions": {
             "users": {
                 "includeUsers": ["All"],

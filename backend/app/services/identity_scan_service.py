@@ -78,6 +78,7 @@ from app.services.finding_cleanup import (
 )
 from app.services.remediation_decision_engine import generate_remediation_decisions
 from app.services.token_manager import get_valid_access_token
+from app.services.ca_policy_states import CA_STATE_REPORT_ONLY
 from app.services.graph.graph_fetcher import GraphFetcher
 from app.services.detection.conditional_access.ca_mfa_checks import (
     detect_ca_mfa_all_users,
@@ -134,8 +135,8 @@ def _mfa_policy_state(policy: dict) -> str | None:
     state = str(policy.get("state") or "").strip()
     if state == "enabled":
         return "enabled"
-    if state == "reportOnly":
-        return "reportOnly"
+    if state == CA_STATE_REPORT_ONLY:
+        return "report_only"
     return None
 
 
@@ -163,7 +164,7 @@ def _evaluate_mfa_coverage(
 
         if policy_state == "enabled":
             enabled_policy_ids.append(policy_id)
-        elif policy_state == "reportOnly":
+        elif policy_state == "report_only":
             report_only_policy_ids.append(policy_id)
 
     if enabled_policy_ids:

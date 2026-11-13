@@ -14,6 +14,10 @@
 * A Microsoft sign-in refused because the tenant already has an owner now says so on the
   login page (without naming the owner) instead of showing a bare login page.
 * In the demo, a refused fix shows a plain message where you clicked.
+* Conditional Access report-only policies use Graph's real state value,
+  `enabledForReportingButNotEnforced`. The code sent `reportOnly`, which Graph rejects, so
+  the licence check that runs before every Conditional Access fix failed and no
+  Conditional Access fix could run; scans also missed existing report-only MFA policies.
 
 ## 0.1.0 (2026-11-12)
 

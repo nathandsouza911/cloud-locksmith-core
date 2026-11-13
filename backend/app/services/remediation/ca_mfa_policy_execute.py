@@ -2,7 +2,7 @@
 
 These controls deploy CA policies that enforce MFA or block legacy authentication
 protocols. Unlike the block-policy controls (device code flow, auth transfer), the
-execution mode is variable — the policy can be created in audit (reportOnly) or
+execution mode is variable — the policy can be created in audit (report-only) or
 enforced (enabled) state. Mode is derived from evidence["enforcement_mode"] and
 defaults to "audit" so that an unspecified mode always creates the policy in
 report-only state, never enforced without an explicit caller decision.

@@ -1,3 +1,4 @@
+from app.services.ca_policy_states import CA_STATE_REPORT_ONLY
 from app.utils.datetime import to_naive_utc, utc_now
 import inspect
 import logging
@@ -380,7 +381,7 @@ async def execute_remediation(
                         "policy_name",
                         "CLX-MFA-ADMINS" if ca_control_id == CONTROL_MFA_ADMINS else "CLX-MFA-ALL-USERS",
                     ),
-                    "state": "enabled" if effective_mode == "enforced" else "reportOnly",
+                    "state": "enabled" if effective_mode == "enforced" else CA_STATE_REPORT_ONLY,
                     "rollout_phase": effective_rollout_phase or _default_rollout_phase(ca_control_id),
                 },
             }

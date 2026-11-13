@@ -254,7 +254,7 @@ def test_apply_policies_bulk_restores_multiple_policies_without_sibling_cleanup(
             {
                 "id": "2",
                 "displayName": "CLX-MFA-ADMINS-v2",
-                "state": "reportOnly",
+                "state": "enabledForReportingButNotEnforced",
                 "conditions": {},
                 "grantControls": {},
             },
@@ -276,7 +276,7 @@ def test_apply_policies_bulk_restores_multiple_policies_without_sibling_cleanup(
                 {
                     "id": "2",
                     "displayName": "CLX-MFA-ADMINS-v2",
-                    "state": "reportOnly",
+                    "state": "enabledForReportingButNotEnforced",
                     "conditions": {},
                     "grantControls": {},
                 },

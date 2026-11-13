@@ -1,5 +1,8 @@
+from app.services.ca_policy_states import CA_STATE_ENABLED, CA_STATE_REPORT_ONLY
+
+
 def is_mfa_policy(policy: dict) -> bool:
-    if policy.get("state") not in {"enabled", "reportOnly"}:
+    if policy.get("state") not in {CA_STATE_ENABLED, CA_STATE_REPORT_ONLY}:
         return False
 
     grant_controls = policy.get("grantControls") or {}
@@ -13,7 +16,7 @@ def is_mfa_policy(policy: dict) -> bool:
 def is_tenant_wide_mfa_policy(policy: dict) -> bool:
     """
     Returns True when a CA policy is ALL of:
-      - state == "enabled"  (reportOnly is not enforced)
+      - state == "enabled"  (report-only is not enforced)
       - MFA is required via builtInControls["mfa"] OR authenticationStrength
       - conditions.users.includeUsers contains "All"
 

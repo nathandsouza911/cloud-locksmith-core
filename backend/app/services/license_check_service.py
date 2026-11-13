@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from app.services.graph_client import GraphAPIError
+from app.services.ca_policy_states import CA_STATE_REPORT_ONLY
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ async def check_conditional_access_license(graph_client) -> bool:
     """
     payload = {
         "displayName": "CLX-LICENSE-CHECK-TEMP",
-        "state": "reportOnly",
+        "state": CA_STATE_REPORT_ONLY,
         "conditions": {
             "users": {
                 "includeUsers": ["All"],
