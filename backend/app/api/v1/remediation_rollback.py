@@ -39,6 +39,20 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 
+# CA controls rolled back by the CA engine from its control snapshots.
+CA_ENGINE_CONTROLS = frozenset(
+    {
+        "CA_MFA_ALL_USERS",
+        "CA_MFA_ADMINS",
+        "CA_LEGACY_AUTH_BLOCK",
+        "CA_DEVICE_CODE_FLOW_BLOCK",
+        "CA_AUTHENTICATION_TRANSFER_BLOCK",
+        "CA_GUEST_MFA",
+        "CA_BREAK_GLASS_EXCLUSION",
+    }
+)
+
+
 def _latest_rollback_source(db: Session, tenant_id: str, control_id: str) -> str | None:
     """Latest engine execution for this tenant and control that changed the tenant
     (success or partial) and kept a pre-change snapshot."""
@@ -85,15 +99,7 @@ async def rollback_remediation(
             detail=f"Rollback not supported for {compliance.control_id}",
         )
 
-    is_ca_engine_control = compliance.control_id in {
-        "CA_MFA_ALL_USERS",
-        "CA_MFA_ADMINS",
-        "CA_LEGACY_AUTH_BLOCK",
-        "CA_DEVICE_CODE_FLOW_BLOCK",
-        "CA_AUTHENTICATION_TRANSFER_BLOCK",
-        "CA_GUEST_MFA",
-        "CA_BREAK_GLASS_EXCLUSION",
-    }
+    is_ca_engine_control = compliance.control_id in CA_ENGINE_CONTROLS
 
     # A CA change whose verification failed leaves the finding FAILED, but the change
     # is in the tenant and the engine kept a pre-change snapshot: allow undoing it.
