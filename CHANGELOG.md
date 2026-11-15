@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+* **Delete Account** now removes every row of the tenant. It missed six tables: rows in
+  assets, drift notifications, remediation actions or remediation verifications made the
+  deletion fail, and campaign tasks and report payloads were left behind. A test now
+  fails if a new tenant table is not handled. Only the deletion record (tenant ID, name,
+  who deleted it) is kept.
 * Register an existing break-glass account from **Settings** → **Break-glass accounts**
   (tenant owner only), instead of inserting a database row by hand. The account must be
   enabled, a member and a current Global Administrator of the connected tenant
