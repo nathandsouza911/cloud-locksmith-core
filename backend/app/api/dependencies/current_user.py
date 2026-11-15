@@ -230,3 +230,21 @@ def require_write_access(request: Request):
                 "message": "OWNER or ADMIN role is required for this action.",
             },
         )
+
+
+def is_tenant_owner(request: Request) -> bool:
+    return getattr(request.state, "user_tenant_role", None) == "OWNER"
+
+
+def require_owner(request: Request):
+    """Allow only the tenant OWNER. Fail closed on any other or missing role."""
+    if not is_tenant_owner(request):
+        logger.warning(
+            "owner_access_denied path=%s role=%s",
+            getattr(request.url, "path", None),
+            getattr(request.state, "user_tenant_role", None),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "OWNER_REQUIRED", "message": "Only the tenant owner can change break-glass accounts."},
+        )
