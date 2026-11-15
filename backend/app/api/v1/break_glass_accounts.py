@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.current_user import (
+    audit_actor,
     get_current_user,
     get_explicit_current_tenant,
     is_tenant_owner,
@@ -33,10 +34,6 @@ class RegisterBreakGlassRequest(BaseModel):
     user: str = Field(min_length=1, max_length=256, description="Object ID or user principal name")
 
 
-def _actor(user: PlatformUser) -> str:
-    return getattr(user, "email", None) or str(getattr(user, "id", ""))
-
-
 def _http_error(exc: BreakGlassRegistrationError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message})
 
@@ -58,7 +55,7 @@ async def register_break_glass_account(
     current_user: PlatformUser = Depends(get_current_user),
 ):
     try:
-        return await register_existing(db, current_tenant, payload.user, actor=_actor(current_user))
+        return await register_existing(db, current_tenant, payload.user, actor=audit_actor(current_user))
     except BreakGlassRegistrationError as exc:
         raise _http_error(exc) from exc
 
@@ -71,7 +68,7 @@ async def remove_break_glass_account(
     current_user: PlatformUser = Depends(get_current_user),
 ):
     try:
-        remove_registered(db, current_tenant, account_id, actor=_actor(current_user))
+        remove_registered(db, current_tenant, account_id, actor=audit_actor(current_user))
     except BreakGlassRegistrationError as exc:
         raise _http_error(exc) from exc
     return Response(status_code=204)

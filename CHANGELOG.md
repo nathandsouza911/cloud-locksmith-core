@@ -21,6 +21,11 @@
   kept no audit record. Migration `20261115_audit_log_fixes` repairs both; rows remain
   immutable, except that deleting a tenant (**Settings** → **Delete Account**) removes
   that tenant's audit rows with the rest of its data.
+* The audit trail records who approved, executed and rolled back a fix from the signed-in
+  session. The approve and rollback endpoints took `approved_by` / `requested_by` from
+  the request body (defaulting to `"ui"`), so records said "ui" and a signed-in admin
+  could name someone else. Those body fields are now ignored; execution records
+  `executed_by`.
 
 ## 0.1.1 (2026-11-13)
 
