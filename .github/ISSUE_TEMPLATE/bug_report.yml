@@ -1,0 +1,44 @@
+name: Bug report
+description: Something did not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste tokens, tenant IDs, user names, email addresses or other tenant data. Replace them with placeholders.
+        Security issues go to private reporting (see SECURITY.md), not here.
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Where did it happen?
+      options:
+        - Demo (no Microsoft account)
+        - Real tenant, Preview sign-in (read-only)
+        - Real tenant, full connect
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.1.1 or a commit hash
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did
+      description: Steps, page, and the control or finding involved.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error messages (redacted)
+      render: text

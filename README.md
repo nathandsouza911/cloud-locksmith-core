@@ -93,6 +93,21 @@ npm run lint && npm run typecheck && npm run format:check
 npx jest
 ```
 
+## Feedback we would like
+
+The most useful reports right now:
+
+* **Wrong findings.** A control that fails on a tenant you believe is configured
+  correctly, or passes when it should not (the *False positive* issue template).
+* **What happened on a real tenant.** Which controls you ran, what was refused and
+  why, and anything the dashboard said that did not match what Microsoft showed.
+* **Missing checks** you would want before trusting a tool like this
+  (*Control request*).
+* **Anything that made you stop** during setup or the demo.
+
+Please leave tenant data out of public issues (IDs, names, addresses, policy exports).
+Security problems go to private reporting, see `SECURITY.md`.
+
 ## Contributing and security
 
 Contributions are welcome under a Contributor License Agreement: see `CONTRIBUTING.md`

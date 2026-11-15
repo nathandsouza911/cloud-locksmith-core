@@ -1,0 +1,35 @@
+name: False positive or wrong finding
+description: A control reported a finding that is wrong for your tenant, or missed one.
+labels: [false-positive]
+body:
+  - type: markdown
+    attributes:
+      value: Do not paste tenant data. Describe the configuration in general terms (for example "one CA policy targeting all users, excluding group X").
+  - type: input
+    id: control
+    attributes:
+      label: Control ID
+      description: From the finding or docs/controls.md, for example CA_LEGACY_AUTH_BLOCK.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - Reported a finding that should pass
+        - Missed a finding that should fail
+        - Right result, wrong explanation or severity
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant tenant configuration (described, not pasted)
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why you think the result is wrong
+      description: Link Microsoft documentation if it helps.
