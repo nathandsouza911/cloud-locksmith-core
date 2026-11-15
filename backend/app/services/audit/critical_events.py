@@ -26,6 +26,8 @@ AUDIT_CRITICAL_EVENTS = frozenset(
     {
         # Hash-chain logger (action)
         "OFFBOARDING",
+        "BREAK_GLASS_REGISTERED",  # changes which accounts every CA fix must exclude
+        "BREAK_GLASS_REMOVED",
         # Remediation logger (event_type)
         "EXECUTE_STARTED",  # gates remediation + break-glass before the Graph call
         "EXECUTED",
