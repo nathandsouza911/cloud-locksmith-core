@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+* Change records: export every executed fix as JSON (who executed and approved it, the
+  before and after state, each changed setting's before and after value, verification
+  and rollback), and view one from **Remediation History** → **View change**. Suggested
+  by the first public feedback. See `docs/remediation-lifecycle.md`.
+
 ## 0.1.1 (2026-11-13)
 
 Fixes from the roadmap's first phase and from a supervised live run against a developer

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { History, RefreshCw, RotateCcw } from "lucide-react";
+import { Download, FileText, History, RefreshCw, RotateCcw } from "lucide-react";
 
 import {
   Button,
@@ -12,6 +12,7 @@ import {
   StatusBadge,
   TableSkeleton,
 } from "@/components/ui";
+import ChangeRecordPanel, { downloadChangeRecords } from "@/components/remediation/ChangeRecordPanel";
 import * as ep from "@/lib/api/endpoints";
 import { useRemediationHistory } from "@/lib/api/hooks";
 import type { RemediationHistoryItem } from "@/types";
@@ -31,6 +32,20 @@ export default function RemediationHistoryPage() {
   const [rows, setRows] = useState<RemediationHistoryItem[] | null>(null);
   const [actionId, setActionId] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    setToast(null);
+    try {
+      await downloadChangeRecords();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const history = rows ?? historyQuery.data ?? [];
   const recentChanges = useMemo(() => history.slice(0, 5), [history]);
@@ -66,9 +81,14 @@ export default function RemediationHistoryPage() {
         title="Remediation History & Rollback"
         subtitle="Review recent successful remediations and manage rollback from a dedicated audit surface"
         actions={
-          <Button variant="secondary" size="sm" onClick={refetch} loading={historyQuery.loading}>
-            <RefreshCw size={13} /> Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={handleExport} loading={exporting}>
+              <Download size={13} /> Export change records
+            </Button>
+            <Button variant="secondary" size="sm" onClick={refetch} loading={historyQuery.loading}>
+              <RefreshCw size={13} /> Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -144,7 +164,14 @@ export default function RemediationHistoryPage() {
                       <td className="px-5 py-4">
                         <StatusBadge value={item.status} />
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-4 flex gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setViewing(item.compliance_result_id)}
+                        >
+                          <FileText size={12} /> View change
+                        </Button>
                         <Button
                           variant="secondary"
                           size="sm"
@@ -163,6 +190,10 @@ export default function RemediationHistoryPage() {
           )}
         </Card>
       </div>
+
+      {viewing !== null && (
+        <ChangeRecordPanel key={viewing} complianceResultId={viewing} onClose={() => setViewing(null)} />
+      )}
     </div>
   );
 }
