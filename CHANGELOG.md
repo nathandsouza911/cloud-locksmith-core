@@ -5,7 +5,6 @@
 * The API (`GET /` and the OpenAPI page) and the dashboard package now report the release
   version; they still said 0.1.0 in 0.1.1. A test keeps the README, the compose image
   tags, the dashboard package and the API version the same.
-
 * **Delete Account** now removes every row of the tenant. It missed six tables: rows in
   assets, drift notifications, remediation actions or remediation verifications made the
   deletion fail, and campaign tasks and report payloads were left behind. A test now
