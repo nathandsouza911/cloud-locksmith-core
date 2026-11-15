@@ -18,7 +18,7 @@ Requires Docker with Compose.
 ```
 git clone <this repository> cloud-locksmith-core
 cd cloud-locksmith-core
-docker compose up --build
+docker compose up
 ```
 
 Then open http://localhost:3000 and click **Sign in to the demo**.
@@ -26,9 +26,11 @@ Then open http://localhost:3000 and click **Sign in to the demo**.
 The demo shows a recorded scan of a fictional tenant ("Contoso (fictional demo)"): posture
 score and history, findings, risk feed, attack paths, and the **Simulate Fix** preview. It
 makes no Microsoft calls, needs no `.env`, and refuses every change except the simulation.
-A first `docker compose up --build` builds the images: in two measured runs from a fresh
-clone it took 7 and 10 minutes, mostly installing the dashboard's npm packages (base images
-were already downloaded; allow extra time for those). Later starts take seconds. The fix buttons are shown but any change is refused, and
+From release 0.1.2 on, `docker compose up` pulls prebuilt images for that release from
+`ghcr.io`. When they cannot be pulled (before that release, or on a commit after it) it
+builds them from your checkout instead, as `docker compose up --build` always does. A build
+from a fresh clone took 7 and 10 minutes in two measured runs, mostly installing the
+dashboard's npm packages. Later starts take seconds. The fix buttons are shown but any change is refused, and
 the dashboard does not yet explain the refusal beyond the demo banner.
 
 ![Demo dashboard: posture score and top findings](docs/images/demo-dashboard.png)

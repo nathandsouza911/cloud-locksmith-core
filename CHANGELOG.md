@@ -31,6 +31,11 @@
   the duplicate waited for that lock inside the event loop. The duplicate now gets 409
   at once. Any other database lock wait now fails after `DB_LOCK_TIMEOUT_MS` (default 5
   seconds) instead of hanging.
+* The demo starts from prebuilt images. A release tag now publishes
+  `cloud-locksmith-core-backend` and `cloud-locksmith-core-dashboard-demo` (amd64 and
+  arm64) to `ghcr.io`, and `docker compose up` pulls the images for the release it
+  names, building from source only when they cannot be pulled. The tag workflow fails if
+  `docker-compose.yml` does not pin the tag's version.
 
 ## 0.1.1 (2026-11-13)
 
