@@ -1,7 +1,11 @@
 # Cloud Locksmith Core: demo stack.
 #
-#   docker compose up --build
+#   docker compose up
 #   then open http://localhost:3000 and click "Sign in to the demo".
+#
+# It pulls the release's prebuilt images from ghcr.io. If they cannot be pulled (for
+# example on a commit after the last release), it builds them from this checkout.
+# `docker compose up --build` always builds from source.
 #
 # The demo serves a recorded scan of a fictional tenant. It makes no Microsoft calls,
 # needs no .env file, and refuses every change except the fix simulation. Every value
@@ -55,7 +59,8 @@ services:
   # The seed job and the API share one image, so the backend is built once.
   seed:
     build: ./backend
-    image: cloud-locksmith-core-backend:local
+    image: ghcr.io/nathandsouza911/cloud-locksmith-core-backend:0.1.2
+    pull_policy: missing
     environment: *demo-api-env
     command: ["python", "-m", "app.demo.seed"]
     depends_on:
@@ -65,8 +70,8 @@ services:
     networks: [backend]
 
   api:
-    image: cloud-locksmith-core-backend:local
-    pull_policy: never
+    image: ghcr.io/nathandsouza911/cloud-locksmith-core-backend:0.1.2
+    pull_policy: never  # the seed service pulls or builds it
     environment: *demo-api-env
     depends_on:
       seed:
@@ -78,6 +83,8 @@ services:
     networks: [backend, frontend]
 
   dashboard:
+    image: ghcr.io/nathandsouza911/cloud-locksmith-core-dashboard-demo:0.1.2
+    pull_policy: missing
     build:
       context: ./dashboard
       args:

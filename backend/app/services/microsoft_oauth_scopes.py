@@ -50,6 +50,7 @@ LICENSE_COST_CHECKER_SCOPES = [
 LICENSE_COST_CHECKER_SCOPE_STRING = " ".join(LICENSE_COST_CHECKER_SCOPES)
 
 WRITE_SCOPES = {
+    "User.ReadWrite.All",
     "Policy.ReadWrite.Authorization",
     "Policy.ReadWrite.ConditionalAccess",
     "RoleManagement.ReadWrite.Directory",

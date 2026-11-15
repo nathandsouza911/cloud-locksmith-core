@@ -329,9 +329,11 @@ from app.api.v1.control import controls_router
 app.include_router(control_router, prefix="/api/v1")
 app.include_router(controls_router, prefix="/api/v1")
 
+from app.api.v1.break_glass_accounts import router as break_glass_accounts_router
 from app.api.v1.break_glass_events import router as break_glass_events_router
 
 app.include_router(break_glass_events_router)
+app.include_router(break_glass_accounts_router)
 
 from app.api.v1.offboarding_sessions import router as offboarding_sessions_router
 

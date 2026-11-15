@@ -32,7 +32,10 @@ import type {
   VerifyResponse,
   ExecuteRemediationResponse,
   BreakGlassCreateResponse,
+  BreakGlassAccount,
+  BreakGlassAccountList,
   BreakGlassUsageEvent,
+  RegisteredBreakGlassAccount,
   LicenseFindingsResponse,
   LicenseScanResponse,
   LicenseSummary,
@@ -111,6 +114,14 @@ export const getUsers = () => api.get<DirectoryUser[]>("/api/v1/users");
 export const getUser = (userId: string) => api.get<DirectoryUser>(`/api/v1/users/${userId}`);
 
 export const getBreakGlassEvents = () => api.get<BreakGlassUsageEvent[]>("/api/v1/break-glass/events");
+
+export const getBreakGlassAccounts = () => api.get<BreakGlassAccountList>("/api/v1/break-glass/accounts");
+
+export const registerBreakGlassAccount = (user: string) =>
+  api.post<RegisteredBreakGlassAccount>("/api/v1/break-glass/accounts", { user });
+
+export const removeBreakGlassAccount = (id: BreakGlassAccount["id"]) =>
+  api.delete<void>(`/api/v1/break-glass/accounts/${encodeURIComponent(String(id))}`);
 
 export const createSupportTicket = (payload: SupportTicketCreatePayload) =>
   api.post<SupportTicket>("/api/v1/support/tickets", payload);

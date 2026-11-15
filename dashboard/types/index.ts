@@ -310,6 +310,23 @@ export interface DirectoryUser {
   open_findings: number;
 }
 
+export interface BreakGlassAccount {
+  id: number;
+  user_external_id: string;
+  created_at: string | null;
+}
+
+export interface BreakGlassAccountList {
+  accounts: BreakGlassAccount[];
+  can_manage: boolean;
+}
+
+export interface RegisteredBreakGlassAccount extends BreakGlassAccount {
+  user_principal_name: string | null;
+  display_name: string | null;
+  warnings: string[];
+}
+
 export interface BreakGlassUsageEvent {
   id: number;
   tenant_id: string;
