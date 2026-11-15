@@ -107,8 +107,10 @@ Before the first Conditional Access fix:
   if you rely on them.
 * **Register at least one break-glass account.** The pre-flight check refuses any
   Conditional Access fix until the product knows at least one break-glass account, and
-  every policy it creates excludes those accounts. See the known issue below for
-  registering an account that already exists.
+  every policy it creates excludes those accounts. To use an account you already have,
+  open **Settings** → **Break-glass accounts** (tenant owner only) and enter its object ID
+  or UPN. It is accepted only if Microsoft confirms it is enabled, a member (not a
+  guest) and a current Global Administrator; the change is written to the audit log.
 
 Then use **Risk Feed** (or **Security Controls**) → **Review & Fix**. This approves and
 executes in one step, after the pre-flight checks. The policy is created in
@@ -124,19 +126,6 @@ account. To start over on a local install, drop the database volume
 
 ## Known issues (seen in the 2026-11-13 run)
 
-* **No way to register an existing break-glass account.** The pre-flight check reads the
-  product's own list of break-glass accounts, and only the *create break-glass accounts*
-  fix adds to it (by creating new accounts). For a local install you can add an existing
-  account directly; use its Entra object ID and your tenant ID:
-
-  ```
-  docker compose exec postgres psql -U postgres -d cloudlocksmith -c \
-    "insert into break_glass_accounts (tenant_id, user_external_id, created_at)
-     values ('<tenant-id>', '<break-glass-object-id>', now());"
-  ```
-
-  The pre-flight check still confirms with Microsoft that the account is an active
-  Global Administrator.
 * **Enforcing a Conditional Access fix is not available in the dashboard.** Fixes run in
   the finding's mode, which defaults to report-only.
 * **Stale service principals** use Microsoft's service-principal sign-in report, a beta
