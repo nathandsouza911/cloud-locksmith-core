@@ -12,9 +12,8 @@ from __future__ import annotations
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.db.locking import is_lock_not_available
 from app.db.models.compliance_result import ComplianceResult
-
-_LOCK_NOT_AVAILABLE = "55P03"
 
 
 class FindingBusyError(Exception):
@@ -33,7 +32,7 @@ def lock_finding_nowait(db: Session, *, compliance_result_id: int, tenant_id: st
             .one_or_none()
         )
     except OperationalError as exc:
-        if getattr(getattr(exc, "orig", None), "pgcode", None) == _LOCK_NOT_AVAILABLE:
+        if is_lock_not_available(exc):
             db.rollback()
             raise FindingBusyError("Another remediation for this finding is in progress") from exc
         raise

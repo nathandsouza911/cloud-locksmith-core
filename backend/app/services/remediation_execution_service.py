@@ -512,7 +512,7 @@ async def execute_approved_remediation(
             resource_id=compliance.resource_id,
             event_type="EXECUTE_STARTED",
             confidence=1.0,
-            metadata={"execution_attempts": compliance.execution_attempts},
+            metadata={"execution_attempts": compliance.execution_attempts, "executed_by": approved_by or "system"},
         )
     except BaseException:
         if tenant_lock_acquired:
