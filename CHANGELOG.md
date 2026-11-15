@@ -26,6 +26,11 @@
   the request body (defaulting to `"ui"`), so records said "ui" and a signed-in admin
   could name someone else. Those body fields are now ignored; execution records
   `executed_by`.
+* A repeated Microsoft sign-in callback (a browser retry or a replayed link) could freeze
+  the whole API: the callback locks its sign-in record and then waits on Microsoft, and
+  the duplicate waited for that lock inside the event loop. The duplicate now gets 409
+  at once. Any other database lock wait now fails after `DB_LOCK_TIMEOUT_MS` (default 5
+  seconds) instead of hanging.
 
 ## 0.1.1 (2026-11-13)
 
