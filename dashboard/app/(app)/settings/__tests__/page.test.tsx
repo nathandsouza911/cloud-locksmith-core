@@ -78,6 +78,11 @@ jest.mock("@/lib/api/endpoints", () => ({
   deleteTenant: jest.fn(),
 }));
 
+jest.mock("@/components/settings/BreakGlassAccountsCard", () => ({
+  __esModule: true,
+  default: () => require("react").createElement("div", { "data-testid": "break-glass-card" }),
+}));
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function renderSettings() {
@@ -245,5 +250,18 @@ describe("Microsoft 365 Connection badge — Gate 1", () => {
     renderSettings();
     expect(screen.getByText(/needs re-auth/i)).toBeInTheDocument();
     expect(screen.queryByText(/^connected$/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("break-glass accounts card", () => {
+  test("is shown for a connected tenant", () => {
+    mockUseAuth.mockReturnValue(authWith({ selectedTenant: { id: "tenant-abc", needs_reauth: false } }));
+    renderSettings();
+    expect(screen.getByTestId("break-glass-card")).toBeInTheDocument();
+  });
+
+  test("is hidden when no tenant is connected", () => {
+    renderSettings();
+    expect(screen.queryByTestId("break-glass-card")).not.toBeInTheDocument();
   });
 });

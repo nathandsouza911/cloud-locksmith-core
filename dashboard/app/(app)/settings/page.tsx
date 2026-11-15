@@ -9,6 +9,7 @@ import { startMicrosoftOAuth } from "@/lib/auth";
 import { useSimulation, useUsers } from "@/lib/api/hooks";
 import { requireTenantIdentitySnapshot } from "@/lib/simulation";
 import { deleteTenant } from "@/lib/api/endpoints";
+import BreakGlassAccountsCard from "@/components/settings/BreakGlassAccountsCard";
 
 export default function SettingsPage() {
   const { user, logout, tenantId, isSmb, selectedTenant } = useAuth();
@@ -108,6 +109,8 @@ export default function SettingsPage() {
           <RefreshCw size={13} /> Re-authorize Microsoft OAuth
         </Button>
       </Card>
+
+      {selectedTenant != null && <BreakGlassAccountsCard />}
 
       {/* Simulation */}
       <Card className="p-6 space-y-4 max-w-2xl">
