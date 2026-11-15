@@ -5,6 +5,10 @@ Access misconfigurations, scores the tenant's posture, and fixes findings throug
 approval-gated workflow with verification and rollback. It is multi-tenant, so an MSP can
 run it across client tenants.
 
+**Before connecting a real tenant, read [`docs/trust.md`](docs/trust.md)**: the scopes it
+requests (a full connect includes write scopes), what it stores, what it can change and
+the gates in front of that, and how to delete its data and revoke its access.
+
 Status: **0.1.1**. AGPL-3.0. See `CHANGELOG.md` for what changed since the first open-source release (0.1.0).
 
 ## Try the demo (no Microsoft account needed)
@@ -14,7 +18,7 @@ Requires Docker with Compose.
 ```
 git clone <this repository> cloud-locksmith-core
 cd cloud-locksmith-core
-docker compose up --build
+docker compose up
 ```
 
 Then open http://localhost:3000 and click **Sign in to the demo**.
@@ -22,9 +26,11 @@ Then open http://localhost:3000 and click **Sign in to the demo**.
 The demo shows a recorded scan of a fictional tenant ("Contoso (fictional demo)"): posture
 score and history, findings, risk feed, attack paths, and the **Simulate Fix** preview. It
 makes no Microsoft calls, needs no `.env`, and refuses every change except the simulation.
-A first `docker compose up --build` builds the images: in two measured runs from a fresh
-clone it took 7 and 10 minutes, mostly installing the dashboard's npm packages (base images
-were already downloaded; allow extra time for those). Later starts take seconds. The fix buttons are shown but any change is refused, and
+From release 0.1.2 on, `docker compose up` pulls prebuilt images for that release from
+`ghcr.io`. When they cannot be pulled (before that release, or on a commit after it) it
+builds them from your checkout instead, as `docker compose up --build` always does. A build
+from a fresh clone took 7 and 10 minutes in two measured runs, mostly installing the
+dashboard's npm packages. Later starts take seconds. The fix buttons are shown but any change is refused, and
 the dashboard does not yet explain the refusal beyond the demo banner.
 
 ![Demo dashboard: posture score and top findings](docs/images/demo-dashboard.png)
@@ -64,6 +70,7 @@ See `docs/connect-a-real-tenant.md` and `docs/permissions.md`.
 
 ## Docs
 
+* `docs/trust.md`: scopes, stored data, what it can change, deletion and revocation.
 * `docs/architecture.md`: components, request path, identity, background jobs.
 * `docs/controls.md`: every control, generated from the code.
 * `docs/remediation-lifecycle.md`: approve, execute, verify, roll back; auto-remediation.
@@ -92,6 +99,21 @@ npm ci
 npm run lint && npm run typecheck && npm run format:check
 npx jest
 ```
+
+## Feedback we would like
+
+The most useful reports right now:
+
+* **Wrong findings.** A control that fails on a tenant you believe is configured
+  correctly, or passes when it should not (the *False positive* issue template).
+* **What happened on a real tenant.** Which controls you ran, what was refused and
+  why, and anything the dashboard said that did not match what Microsoft showed.
+* **Missing checks** you would want before trusting a tool like this
+  (*Control request*).
+* **Anything that made you stop** during setup or the demo.
+
+Please leave tenant data out of public issues (IDs, names, addresses, policy exports).
+Security problems go to private reporting, see `SECURITY.md`.
 
 ## Contributing and security
 

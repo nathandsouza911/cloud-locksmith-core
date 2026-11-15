@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.current_user import get_explicit_current_tenant
@@ -8,6 +11,7 @@ from app.db.models.remediation_audit import RemediationAuditLog
 from app.db.models.remediation_snapshot import RemediationSnapshot
 from app.db.models.tenant import Tenant
 from app.db.session import get_sync_db
+from app.services.change_records import build_change_records
 from app.services.remediation.lifecycle import current_remediation_status
 from app.services.remediation.control_registry import CONTROL_REGISTRY, get_control_capabilities
 from app.api.v1.remediation_rollback import CA_ENGINE_CONTROLS, _latest_rollback_source
@@ -86,4 +90,27 @@ def _snapshot_available(db: Session, tenant_id: str, compliance: ComplianceResul
     return (
         db.query(RemediationSnapshot.id).filter(RemediationSnapshot.compliance_result_id == compliance.id).first()
         is not None
+    )
+
+
+@router.get("/change-records")
+def get_change_records(
+    compliance_result_id: int | None = Query(default=None),
+    since: datetime | None = Query(default=None),
+    download: bool = Query(default=False),
+    db: Session = Depends(get_sync_db),
+    current_tenant: Tenant = Depends(get_explicit_current_tenant),
+):
+    """One record per executed fix for the session's tenant (ROADMAP 3.3): who executed
+    and approved it, the before and after state, each changed setting, verification and
+    rollback. ``download=true`` returns it as a JSON file."""
+    records = build_change_records(
+        db, tenant_id=current_tenant.id, compliance_result_id=compliance_result_id, since=since
+    )
+    body = {"tenant_id": current_tenant.id, "generated_at": datetime.utcnow().isoformat() + "Z", "records": records}
+    if not download:
+        return body
+    return JSONResponse(
+        content=body,
+        headers={"Content-Disposition": 'attachment; filename="cloud-locksmith-change-records.json"'},
     )
