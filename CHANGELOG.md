@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* The demo starts from prebuilt images. A release tag now publishes
+  `cloud-locksmith-core-backend` and `cloud-locksmith-core-dashboard-demo` (amd64 and
+  arm64) to `ghcr.io`, and `docker compose up` pulls the images for the release it
+  names, building from source only when they cannot be pulled. The tag workflow fails if
+  `docker-compose.yml` does not pin the tag's version.
+
 ## 0.1.1 (2026-11-13)
 
 Fixes from the roadmap's first phase and from a supervised live run against a developer
