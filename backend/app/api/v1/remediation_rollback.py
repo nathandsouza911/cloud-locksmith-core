@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.current_user import get_current_tenant_with_fresh_auth, require_write_access
+from app.api.dependencies.current_user import (
+    audit_actor,
+    get_current_tenant_with_fresh_auth,
+    get_current_user,
+    require_write_access,
+)
+from app.db.models.platform_user import PlatformUser
 from app.db.models.compliance_result import ExposureStatus
 from app.db.models.control_execution import ControlExecution, ControlExecutionStatus
 from app.db.models.remediation_snapshot import RemediationSnapshot
@@ -78,11 +84,12 @@ async def rollback_remediation(
     db: Session = Depends(get_sync_db),
     current_tenant: Tenant = Depends(get_current_tenant_with_fresh_auth),
     _write: None = Depends(require_write_access),
+    current_user: PlatformUser = Depends(get_current_user),
 ):
     payload = payload or {}
 
-    reason = payload.get("reason", "ui-rollback")
-    requested_by = payload.get("requested_by", "ui")
+    reason = str(payload.get("reason") or "ui-rollback")[:500]
+    requested_by = audit_actor(current_user)
     execution_id = payload.get("execution_id")
 
     try:

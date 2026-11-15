@@ -25,6 +25,52 @@ from app.db.models.user_tenant_access import UserTenantAccess
 
 logger = logging.getLogger(__name__)
 
+# Every table with a tenant_id column must appear in exactly one of these sets; the
+# integration test test_tenant_deletion_complete.py compares them with the database.
+TENANT_TABLES_DELETED = frozenset(
+    {
+        # deleted explicitly below
+        "alerts",
+        "assets",
+        "audit_logs",
+        "break_glass_accounts",
+        "break_glass_usage_events",
+        "campaign_tenant_tasks",
+        "compliance_reports",
+        "compliance_results",
+        "compliance_snapshots",
+        "conditional_access_policies",
+        "drift_notifications",
+        "evidence_reports",
+        "findings",
+        "ingestion_snapshots",
+        "license_findings",
+        "license_snapshot",
+        "mfa_posture",
+        "notification_targets",
+        "offboarding_sessions",
+        "posture_snapshots",
+        "remediation_actions",
+        "remediation_audit_logs",
+        "remediation_verifications",
+        "report_payloads",
+        "report_schedules",
+        "tenant_oauth",
+        "user_tenant_access",
+        "users",
+        # removed by ON DELETE CASCADE from tenants
+        "control_executions",
+        "control_snapshots",
+        "control_states",
+        "managed_rollout_groups",
+        "support_tickets",
+        "workflow_review_decisions",
+        "workflow_runs",
+    }
+)
+# Kept on purpose: the record that a tenant was deleted (tenant id, name, who).
+TENANT_TABLES_KEPT = frozenset({"tenant_deletion_logs"})
+
 
 def _delete_non_fk_tables(db: Session, tenant_id: str) -> None:
     """
@@ -39,10 +85,15 @@ def _delete_non_fk_tables(db: Session, tenant_id: str) -> None:
                              can be written even when the tenant row is locked
       report_schedules     — scheduler reads tenant_id as a plain string key;
                              FK was intentionally skipped during initial schema
+      report_payloads, campaign_tenant_tasks — tenant_id without a foreign key
     """
     db.execute(text("DELETE FROM ingestion_snapshots WHERE tenant_id = :tid"), {"tid": tenant_id})
+    # The audit_logs trigger refuses DELETE unless this transaction is purging that tenant.
+    db.execute(text("SELECT set_config('cloudlocksmith.purge_tenant_id', :tid, true)"), {"tid": tenant_id})
     db.execute(text("DELETE FROM audit_logs WHERE tenant_id = :tid"), {"tid": tenant_id})
     db.execute(text("DELETE FROM report_schedules WHERE tenant_id = :tid"), {"tid": tenant_id})
+    db.execute(text("DELETE FROM report_payloads WHERE tenant_id = :tid"), {"tid": tenant_id})
+    db.execute(text("DELETE FROM campaign_tenant_tasks WHERE tenant_id = :tid"), {"tid": tenant_id})
 
 
 def delete_tenant_all_data(db: Session, tenant_id: str) -> None:
@@ -81,6 +132,14 @@ def delete_tenant_all_data(db: Session, tenant_id: str) -> None:
     db.flush()
     db.query(TenantOAuth).filter(TenantOAuth.tenant_id == tenant_id).delete(synchronize_session=False)
     logger.info("tenant_oauth_invalidated tenant_id=%s rows=%s", tenant_id, rows_zeroed)
+
+    # 1a. Drift notifications reference verifications and compliance_results;
+    #     verifications reference remediation_audit_logs and compliance_results
+    #     (deleting a verification cascades its verification_events).
+    db.execute(text("DELETE FROM drift_notifications WHERE tenant_id = :tid"), {"tid": tenant_id})
+    db.execute(text("DELETE FROM remediation_verifications WHERE tenant_id = :tid"), {"tid": tenant_id})
+    db.execute(text("DELETE FROM remediation_actions WHERE tenant_id = :tid"), {"tid": tenant_id})
+    db.execute(text("DELETE FROM assets WHERE tenant_id = :tid"), {"tid": tenant_id})
 
     # 1. Remediation audit logs reference compliance_results, so delete first
     db.query(RemediationAuditLog).filter(RemediationAuditLog.tenant_id == tenant_id).delete(synchronize_session=False)

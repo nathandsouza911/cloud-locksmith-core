@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.current_user import (
+    audit_actor,
     get_current_tenant,
     get_current_tenant_with_fresh_auth,
     get_current_user,
@@ -222,7 +223,7 @@ async def execute_remediation_endpoint(
             execution_payload=payload,
             allow_failed_retry=True,
             auto_approve=True,
-            approved_by=(getattr(current_user, "email", None) or str(getattr(current_user, "id", "ui:fix-now"))),
+            approved_by=audit_actor(current_user),
         )
         if hasattr(result, "id"):
             result = {
@@ -304,9 +305,7 @@ async def create_break_glass_accounts(
 
         payload = parsed_payload if isinstance(parsed_payload, dict) else {}
         approve = bool(payload.get("approve"))
-        approved_by = payload.get("approved_by")
-        if not isinstance(approved_by, str) or not approved_by:
-            approved_by = getattr(current_user, "email", None) or str(getattr(current_user, "id", "ui"))
+        approved_by = audit_actor(current_user)
 
         compliance = _find_break_glass_finding(
             db=db,
