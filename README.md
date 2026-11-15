@@ -5,6 +5,10 @@ Access misconfigurations, scores the tenant's posture, and fixes findings throug
 approval-gated workflow with verification and rollback. It is multi-tenant, so an MSP can
 run it across client tenants.
 
+**Before connecting a real tenant, read [`docs/trust.md`](docs/trust.md)**: the scopes it
+requests (a full connect includes write scopes), what it stores, what it can change and
+the gates in front of that, and how to delete its data and revoke its access.
+
 Status: **0.1.1**. AGPL-3.0. See `CHANGELOG.md` for what changed since the first open-source release (0.1.0).
 
 ## Try the demo (no Microsoft account needed)
@@ -64,6 +68,7 @@ See `docs/connect-a-real-tenant.md` and `docs/permissions.md`.
 
 ## Docs
 
+* `docs/trust.md`: scopes, stored data, what it can change, deletion and revocation.
 * `docs/architecture.md`: components, request path, identity, background jobs.
 * `docs/controls.md`: every control, generated from the code.
 * `docs/remediation-lifecycle.md`: approve, execute, verify, roll back; auto-remediation.
