@@ -755,3 +755,30 @@ export interface ComplianceDashboardResponse {
   frameworks: FrameworkSummary[];
   controls: ControlDashboardRow[];
 }
+
+export interface ChangeRecordChange {
+  setting: string;
+  before: unknown;
+  after: unknown;
+}
+
+export interface ChangeRecord {
+  id: string;
+  compliance_result_id: number;
+  control_id: string;
+  resource: { type: string; id: string };
+  executed_by: string | null;
+  executed_at: string | null;
+  approval: { approved_by: string | null; approved_at: string | null; approval_mode: string | null } | null;
+  before: unknown;
+  after: unknown;
+  changes: ChangeRecordChange[];
+  verification: { verified: boolean | null; scope: string | null };
+  rollback: { rolled_back_at: string | null; requested_by: string | null; reason: string | null } | null;
+}
+
+export interface ChangeRecordExport {
+  tenant_id: string;
+  generated_at: string;
+  records: ChangeRecord[];
+}

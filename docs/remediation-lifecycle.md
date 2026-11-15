@@ -102,3 +102,20 @@ stop remediations. Do not rely on it.
 Remediation decisions, approvals and executions are recorded in
 `remediation_audit_logs`; the general `audit_logs` table is protected by a database
 trigger that rejects UPDATE and DELETE.
+
+## Change records
+
+Every executed fix can be exported as a change record: `GET
+/api/v1/remediation/change-records` (JSON; `download=true` for a file, optional
+`compliance_result_id` and `since`), or **Remediation History** → **Export change
+records**. **View change** on a row shows the same record on screen. Each record has:
+
+* who executed it (`executed_by`; recorded from this version on, `null` for older fixes)
+  and who approved it, when, and how (manual, automatic);
+* the state before the change and after it, and `changes`: each setting that differs,
+  with its before and after value (for a Conditional Access fix, the policies the engine
+  created or updated, keyed by policy ID);
+* whether the change was verified, and any rollback (when, who, reason).
+
+The export only reads what the lifecycle already stores, and only for the signed-in
+tenant (`backend/tests/integration/test_change_records*.py`, including cross-tenant cases).

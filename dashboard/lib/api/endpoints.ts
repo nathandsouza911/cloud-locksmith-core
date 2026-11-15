@@ -5,6 +5,7 @@ import type {
   ArchivedReportResponse,
   AttestationResponse,
   AuditLog,
+  ChangeRecordExport,
   ComplianceResult,
   ComplianceDashboardResponse,
   EligibilityResponse,
@@ -266,6 +267,15 @@ export const getRemediationTimeline = (limit = 100) =>
   api.get<RemediationTimelineItem[]>(`/api/v1/remediation-timeline?limit=${limit}`);
 
 export const getRemediationHistory = () => api.get<RemediationHistoryItem[]>("/api/v1/remediation/history");
+
+export const getChangeRecords = (params: { compliance_result_id?: number; since?: string }) => {
+  const query = new URLSearchParams();
+  if (params.compliance_result_id != null)
+    query.set("compliance_result_id", String(params.compliance_result_id));
+  if (params.since) query.set("since", params.since);
+  const suffix = query.toString() ? `?${query}` : "";
+  return api.get<ChangeRecordExport>(`/api/v1/remediation/change-records${suffix}`);
+};
 
 export const getDecisionByResult = (complianceResultId: string) =>
   api.get<RemediationDecision>(`/api/v1/remediation/decisions/by-result/${complianceResultId}`);
