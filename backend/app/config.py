@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     # Optional flags
     # Auto-remediation is OFF by default. Set to true only in production with explicit sign-off.
     ENABLE_AUTO_REMEDIATION: bool = False
+    # Longest a synchronous database call waits for a lock before failing (ms). Async
+    # endpoints use a synchronous session, so a wait blocks the event loop (ROADMAP 2.8).
+    DB_LOCK_TIMEOUT_MS: int = 5000
     ALLOW_ADMIN_OFFBOARDING: bool = False
     DORMANT_DAYS: int = 60
     UNUSED_ACCOUNT_HIGH_DAYS: int = 90

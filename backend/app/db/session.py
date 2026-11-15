@@ -23,9 +23,19 @@ async def get_db():
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+
+def _sync_connect_args() -> dict:
+    # A lock wait on this engine blocks the event loop of the async endpoint that made
+    # it; give up after DB_LOCK_TIMEOUT_MS instead of waiting indefinitely.
+    if settings.sqlalchemy_sync_database_uri.startswith("postgresql"):
+        return {"options": f"-c lock_timeout={int(settings.DB_LOCK_TIMEOUT_MS)}"}
+    return {}
+
+
 sync_engine = create_engine(
     settings.sqlalchemy_sync_database_uri,
     future=True,
+    connect_args=_sync_connect_args(),
 )
 
 SyncSessionLocal = sessionmaker(

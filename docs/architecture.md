@@ -62,3 +62,12 @@ Fresh installs only: `alembic upgrade head` builds the schema from the baseline 
 step. The baseline was generated from a database migrated through the 77 revisions of the
 earlier private codebase and verified to produce an identical schema. Upgrading a
 database from that earlier codebase is not supported.
+
+**Locks and the event loop.** Most endpoints are `async` but use a synchronous
+SQLAlchemy session, so a database call that waits for a lock blocks the whole event loop.
+The places that lock a row and then await a network call take the lock with `NOWAIT`
+and refuse a second request at once (finding execute and rollback: 409; the OAuth
+callback: 409), see `app/db/locking.py`. As a safety net, every connection of the
+synchronous engine sets `lock_timeout` to `DB_LOCK_TIMEOUT_MS` (default 5000), so any
+other lock wait fails after a few seconds instead of freezing the API. Moving these
+endpoints to the async session is the long-term fix.

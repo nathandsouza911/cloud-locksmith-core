@@ -10,9 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.db.locking import is_lock_not_available
 from app.db.models.pending_oauth_session import PendingOAuthSession
 from app.db.models.platform_user import PlatformUser
 from app.db.models.tenant import Tenant
@@ -267,6 +269,20 @@ def _encode_oauth_state(
     return state
 
 
+def _lock_one_nowait(query):
+    """Lock the row with NOWAIT: the callback awaits network calls while holding it, so a
+    second request must not wait for it inside the event loop (see app.db.locking)."""
+    try:
+        return query.with_for_update(nowait=True).one_or_none()
+    except OperationalError as exc:
+        if is_lock_not_available(exc):
+            query.session.rollback()
+            raise HTTPException(
+                status_code=409, detail="This sign-in is already being processed. Wait for it to finish."
+            ) from exc
+        raise
+
+
 def _decode_oauth_state(db: Session, state: str) -> dict:
     try:
         payload = _oauth_state_serializer().loads(
@@ -302,14 +318,11 @@ def _decode_oauth_state(db: Session, state: str) -> dict:
     # Single-use enforcement: claim the nonce atomically
     nonce = payload.get("nonce")
     logger.debug("oauth_state_validating intent=%s", payload.get("intent"))
-    nonce_record = (
-        db.query(OAuthStateNonce)
-        .filter(
+    nonce_record = _lock_one_nowait(
+        db.query(OAuthStateNonce).filter(
             OAuthStateNonce.nonce == nonce,
             OAuthStateNonce.used_at.is_(None),
         )
-        .with_for_update()
-        .one_or_none()
     )
     if nonce_record is None:
         logger.warning(
@@ -348,7 +361,7 @@ def _claim_pending_oauth_session(
     request: Request,
     state_payload: dict,
 ) -> PendingOAuthSession:
-    pending = db.query(PendingOAuthSession).filter(PendingOAuthSession.state == state).with_for_update().one_or_none()
+    pending = _lock_one_nowait(db.query(PendingOAuthSession).filter(PendingOAuthSession.state == state))
     if pending is None:
         raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
     if pending.consumed_at is not None:
@@ -550,7 +563,7 @@ def _load_pending_msp_session(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=404, detail="Pending MSP connection not found") from exc
 
-    pending = db.query(PendingOAuthSession).filter(PendingOAuthSession.id == pending_id).with_for_update().one_or_none()
+    pending = _lock_one_nowait(db.query(PendingOAuthSession).filter(PendingOAuthSession.id == pending_id))
     if pending is None or pending.intent != "msp_connect":
         raise HTTPException(status_code=404, detail="Pending MSP connection not found")
     if pending.consumed_at is None:
