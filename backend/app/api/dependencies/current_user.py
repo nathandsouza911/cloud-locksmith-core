@@ -230,3 +230,8 @@ def require_write_access(request: Request):
                 "message": "OWNER or ADMIN role is required for this action.",
             },
         )
+
+
+def audit_actor(user: PlatformUser) -> str:
+    """The signed-in user as recorded in audit trails. Never take this from the request body."""
+    return getattr(user, "email", None) or str(getattr(user, "id", ""))

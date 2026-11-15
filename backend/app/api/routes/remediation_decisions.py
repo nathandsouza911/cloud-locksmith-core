@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.current_user import get_current_tenant, require_write_access
+from app.api.dependencies.current_user import audit_actor, get_current_tenant, get_current_user, require_write_access
+from app.db.models.platform_user import PlatformUser
 from app.db.models.compliance_result import ComplianceResult
 from app.db.models.remediation_audit import RemediationAuditLog
 from app.db.models.tenant import Tenant
@@ -179,6 +180,7 @@ def approve_decision(
     db: Session = Depends(get_sync_db),
     current_tenant: Tenant = Depends(get_current_tenant),
     _write: None = Depends(require_write_access),
+    current_user: PlatformUser = Depends(get_current_user),
 ):
     record = (
         db.query(RemediationAuditLog)
@@ -206,7 +208,7 @@ def approve_decision(
     if not finding:
         raise HTTPException(status_code=404, detail="Compliance result not found")
 
-    approved_by = payload.get("approved_by", "manual")
+    approved_by = audit_actor(current_user)
     mark_remediation_approved(
         db=db,
         finding=finding,
@@ -231,6 +233,7 @@ def approve_decision_for_result(
     db: Session = Depends(get_sync_db),
     current_tenant: Tenant = Depends(get_current_tenant),
     _write: None = Depends(require_write_access),
+    current_user: PlatformUser = Depends(get_current_user),
 ):
     payload = payload or {}
 
@@ -249,7 +252,7 @@ def approve_decision_for_result(
             detail="Compliance result not found",
         )
 
-    approved_by = payload.get("approved_by", "ui")
+    approved_by = audit_actor(current_user)
     record = mark_remediation_approved(
         db=db,
         finding=finding,
