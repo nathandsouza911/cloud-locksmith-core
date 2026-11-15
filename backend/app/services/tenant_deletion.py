@@ -88,6 +88,8 @@ def _delete_non_fk_tables(db: Session, tenant_id: str) -> None:
       report_payloads, campaign_tenant_tasks — tenant_id without a foreign key
     """
     db.execute(text("DELETE FROM ingestion_snapshots WHERE tenant_id = :tid"), {"tid": tenant_id})
+    # The audit_logs trigger refuses DELETE unless this transaction is purging that tenant.
+    db.execute(text("SELECT set_config('cloudlocksmith.purge_tenant_id', :tid, true)"), {"tid": tenant_id})
     db.execute(text("DELETE FROM audit_logs WHERE tenant_id = :tid"), {"tid": tenant_id})
     db.execute(text("DELETE FROM report_schedules WHERE tenant_id = :tid"), {"tid": tenant_id})
     db.execute(text("DELETE FROM report_payloads WHERE tenant_id = :tid"), {"tid": tenant_id})
