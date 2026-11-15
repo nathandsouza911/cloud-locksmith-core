@@ -10,7 +10,11 @@ AuditPersistenceError.
 2. The immutability trigger compared ``details`` (type json) with IS NOT DISTINCT
    FROM; json has no equality operator, so the one permitted UPDATE (writing
    sequence_hash/previous_hash) raised "operator does not exist: json = json".
-   It now compares ``details::jsonb``. Every other rule of the trigger is unchanged.
+   It now compares ``details::jsonb``.
+3. Once audit rows exist, deleting a tenant ("Delete account") hit the trigger's
+   DELETE refusal and rolled back. The trigger now lets delete_tenant_all_data remove
+   the rows of the tenant it is deleting, in that transaction only; every other DELETE
+   and UPDATE is still refused.
 
 No rows can exist with a NULL created_at (the writer rolls back on failure).
 
@@ -31,8 +35,13 @@ CREATE OR REPLACE FUNCTION public.audit_log_immutability() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    -- DELETE is unconditionally blocked.
+    -- DELETE is blocked, except while a tenant is being deleted: delete_tenant_all_data
+    -- sets cloudlocksmith.purge_tenant_id for its own transaction only (set_config(...,
+    -- true)), and only that tenant's rows may then be deleted.
     IF TG_OP = 'DELETE' THEN
+        IF OLD.tenant_id = current_setting('cloudlocksmith.purge_tenant_id', true) THEN
+            RETURN OLD;
+        END IF;
         RAISE EXCEPTION
             'audit_logs rows are immutable: DELETE is not permitted (id=%).',
             OLD.id;

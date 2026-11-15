@@ -14,7 +14,8 @@
   compared `json` values, which Postgres cannot do. Sign-in audit events were dropped,
   and user offboarding applied its changes in the tenant, then reported an error and
   kept no audit record. Migration `20261115_audit_log_fixes` repairs both; rows remain
-  immutable.
+  immutable, except that deleting a tenant (**Settings** → **Delete Account**) removes
+  that tenant's audit rows with the rest of its data.
 
 ## 0.1.1 (2026-11-13)
 
