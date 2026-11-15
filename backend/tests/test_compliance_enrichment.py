@@ -23,8 +23,9 @@ def _result(control_id, passed):
 def test_get_framework_mappings_returns_framework_reference_label():
     mappings = ce.get_framework_mappings("IDENTITY_ADMIN_NO_MFA")
     frameworks = {m["framework"] for m in mappings}
-    assert "CIS Microsoft 365 Foundations Benchmark" in frameworks
-    assert "CISA SCuBA (Microsoft Entra ID)" in frameworks
+    # CIS references are unverified (inferred numbering), so they are not shown.
+    assert "CIS Microsoft 365 Foundations Benchmark" not in frameworks
+    assert "CISA SCuBA Microsoft 365 baselines (Entra ID, Exchange Online)" in frameworks
     for m in mappings:
         assert set(m.keys()) == {"framework", "reference_id", "label"}
         assert m["reference_id"]
@@ -58,7 +59,7 @@ def test_enrichment_is_pure_no_db_or_tenant_argument():
 
 def test_framework_reference_fields_splits_by_framework():
     fields = ce.framework_reference_fields("IDENTITY_ADMIN_NO_MFA")
-    assert fields["cis_refs"] == "5.2.2.4"
+    assert fields["cis_refs"] == ""  # unverified framework: not shown
     assert fields["scuba_refs"] == "MS.AAD.3.6v1"
     assert fields["insurance_refs"] == "MFA-ADMIN"
     assert "PR.AA-03" in fields["nist_functions"]
@@ -84,10 +85,11 @@ def test_compute_framework_coverage_counts_passing_and_failing():
         _result("IDENTITY_ADMIN_COUNT_EXCESS", True),
     ]
     coverage = ce.compute_framework_coverage(results)
-    cis = coverage["cis-m365"]
-    assert cis["mapped_controls"] == 3
-    assert cis["passing"] == 2
-    assert cis["failing"] == 1
+    assert "cis-m365" not in coverage  # unverified framework: no coverage figures
+    scuba = coverage["cisa-scuba"]
+    assert scuba["mapped_controls"] == 3
+    assert scuba["passing"] == 2
+    assert scuba["failing"] == 1
 
 
 def test_coverage_excludes_derived_frameworks_and_has_no_percentages():
@@ -103,14 +105,14 @@ def test_coverage_failing_wins_across_multiple_rows_of_same_control():
         _result("IDENTITY_ADMIN_NO_MFA", False),
     ]
     coverage = ce.compute_framework_coverage(results)
-    assert coverage["cis-m365"]["mapped_controls"] == 1
-    assert coverage["cis-m365"]["failing"] == 1
-    assert coverage["cis-m365"]["passing"] == 0
+    assert coverage["cisa-scuba"]["mapped_controls"] == 1
+    assert coverage["cisa-scuba"]["failing"] == 1
+    assert coverage["cisa-scuba"]["passing"] == 0
 
 
 def test_coverage_ignores_controls_with_no_mapping():
     coverage = ce.compute_framework_coverage([_result("USER_OFFBOARDING", True)])
-    assert coverage["cis-m365"]["mapped_controls"] == 0
+    assert coverage["cisa-scuba"]["mapped_controls"] == 0
 
 
 # ---------------------------------------------------------------------------

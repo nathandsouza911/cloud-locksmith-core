@@ -1,36 +1,40 @@
 {
-  "frameworks": [
-    {
-      "id": "cis-m365",
-      "name": "CIS Microsoft 365 Foundations Benchmark",
-      "version": "v5.0",
-      "kind": "authored",
-      "display_order": 1,
-      "homepage": "https://www.cisecurity.org/benchmark/microsoft_365"
-    },
-    {
-      "id": "cisa-scuba",
-      "name": "CISA SCuBA (Microsoft Entra ID)",
-      "version": "2024",
-      "kind": "authored",
-      "display_order": 2,
-      "homepage": "https://www.cisa.gov/resources-tools/services/secure-cloud-business-applications-scuba-project"
-    },
-    {
-      "id": "cyber-insurance",
-      "name": "Cyber Insurance Evidence Categories",
-      "version": "v1",
-      "kind": "authored",
-      "display_order": 3,
-      "homepage": null
-    },
-    {
-      "id": "nist-csf",
-      "name": "NIST Cybersecurity Framework 2.0",
-      "version": "2.0",
-      "kind": "derived",
-      "display_order": 4,
-      "homepage": "https://www.nist.gov/cyberframework"
-    }
-  ]
+ "frameworks": [
+  {
+   "id": "cis-m365",
+   "name": "CIS Microsoft 365 Foundations Benchmark",
+   "version": "v5.0",
+   "kind": "authored",
+   "display_order": 1,
+   "homepage": "https://www.cisecurity.org/benchmark/microsoft_365",
+   "verified": false
+  },
+  {
+   "id": "cisa-scuba",
+   "name": "CISA SCuBA Microsoft 365 baselines (Entra ID, Exchange Online)",
+   "version": "ScubaGear main, read 2026-11-15",
+   "kind": "authored",
+   "display_order": 2,
+   "homepage": "https://www.cisa.gov/resources-tools/services/secure-cloud-business-applications-scuba-project",
+   "verified": true
+  },
+  {
+   "id": "cyber-insurance",
+   "name": "Cyber Insurance Evidence Categories",
+   "version": "v1",
+   "kind": "authored",
+   "display_order": 3,
+   "homepage": null,
+   "verified": true
+  },
+  {
+   "id": "nist-csf",
+   "name": "NIST Cybersecurity Framework 2.0",
+   "version": "2.0",
+   "kind": "derived",
+   "display_order": 4,
+   "homepage": "https://www.nist.gov/cyberframework",
+   "verified": true
+  }
+ ]
 }

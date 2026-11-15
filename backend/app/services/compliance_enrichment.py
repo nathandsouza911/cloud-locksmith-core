@@ -24,6 +24,13 @@ _SCUBA = "cisa-scuba"
 _INSURANCE = "cyber-insurance"
 
 
+def _shown_mappings(control_id: str) -> list[dict]:
+    """Mappings whose framework is verified. Unverified references (the CIS numbers,
+    which were inferred rather than taken from the licensed benchmark) stay in the
+    catalog for review but are never shown in findings, reports or CSVs."""
+    return [m for m in loader.get_control_mappings(control_id) if loader.is_verified(m["framework_id"])]
+
+
 def get_framework_mappings(control_id: str) -> list[dict]:
     """Finding-level mappings: [{framework, reference_id, label}].
 
@@ -31,7 +38,7 @@ def get_framework_mappings(control_id: str) -> list[dict]:
     reference id, and the report label. Unknown/unmapped controls return [].
     """
     result: list[dict] = []
-    for mapping in loader.get_control_mappings(control_id):
+    for mapping in _shown_mappings(control_id):
         framework = loader.get_framework(mapping["framework_id"]) or {}
         result.append(
             {
@@ -45,9 +52,7 @@ def get_framework_mappings(control_id: str) -> list[dict]:
 
 def _refs_for_framework(control_id: str, framework_id: str) -> list[str]:
     return [
-        mapping["reference_id"]
-        for mapping in loader.get_control_mappings(control_id)
-        if mapping["framework_id"] == framework_id
+        mapping["reference_id"] for mapping in _shown_mappings(control_id) if mapping["framework_id"] == framework_id
     ]
 
 
@@ -57,7 +62,7 @@ def framework_reference_fields(control_id: str) -> dict:
     Keys: frameworks, cis_refs, scuba_refs, insurance_refs, nist_functions,
     insurance_category. Values are "; "-joined strings (blank when unmapped).
     """
-    mappings = loader.get_control_mappings(control_id)
+    mappings = _shown_mappings(control_id)
     framework_names = []
     for mapping in mappings:
         framework = loader.get_framework(mapping["framework_id"]) or {}
@@ -107,7 +112,7 @@ def compute_framework_coverage(results) -> dict:
     coverage: dict[str, dict] = {}
 
     for framework in loader.list_frameworks():
-        if framework.get("kind") != "authored":
+        if framework.get("kind") != "authored" or not loader.is_verified(framework["id"]):
             continue
         framework_id = framework["id"]
         mapped = passing = failing = 0
