@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* **Delete Account** now removes every row of the tenant. It missed six tables: rows in
+  assets, drift notifications, remediation actions or remediation verifications made the
+  deletion fail, and campaign tasks and report payloads were left behind. A test now
+  fails if a new tenant table is not handled. Only the deletion record (tenant ID, name,
+  who deleted it) is kept.
+
 ## 0.1.1 (2026-11-13)
 
 Fixes from the roadmap's first phase and from a supervised live run against a developer
