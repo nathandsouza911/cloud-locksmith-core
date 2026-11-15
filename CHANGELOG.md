@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+* **Delete Account** now removes every row of the tenant. It missed six tables: rows in
+  assets, drift notifications, remediation actions or remediation verifications made the
+  deletion fail, and campaign tasks and report payloads were left behind. A test now
+  fails if a new tenant table is not handled. Only the deletion record (tenant ID, name,
+  who deleted it) is kept.
+* Register an existing break-glass account from **Settings** → **Break-glass accounts**
+  (tenant owner only), instead of inserting a database row by hand. The account must be
+  enabled, a member and a current Global Administrator of the connected tenant
+  (checked with Microsoft Graph; no new permission). Owners can also remove accounts;
+  both changes are written to the audit log, and they are refused if the audit record
+  cannot be saved. API: `GET/POST /api/v1/break-glass/accounts`,
+  `DELETE /api/v1/break-glass/accounts/{id}`.
+* The hash-chained audit log failed on every write on a database built from the
+  migrations: `audit_logs.created_at` had no default and the immutability trigger
+  compared `json` values, which Postgres cannot do. Sign-in audit events were dropped,
+  and user offboarding applied its changes in the tenant, then reported an error and
+  kept no audit record. Migration `20261115_audit_log_fixes` repairs both; rows remain
+  immutable, except that deleting a tenant (**Settings** → **Delete Account**) removes
+  that tenant's audit rows with the rest of its data.
 * The audit trail records who approved, executed and rolled back a fix from the signed-in
   session. The approve and rollback endpoints took `approved_by` / `requested_by` from
   the request body (defaulting to `"ui"`), so records said "ui" and a signed-in admin
