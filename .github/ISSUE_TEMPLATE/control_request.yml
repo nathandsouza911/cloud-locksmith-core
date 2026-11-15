@@ -1,0 +1,29 @@
+name: Control request
+description: A check you would like the scanner to run.
+labels: [control-request]
+body:
+  - type: textarea
+    id: risk
+    attributes:
+      label: What risk should it catch?
+    validations:
+      required: true
+  - type: textarea
+    id: signal
+    attributes:
+      label: How could it be detected?
+      description: The Graph data or setting that shows the problem, if you know it. Say whether it needs a licence (Entra ID P1/P2).
+  - type: dropdown
+    id: fix
+    attributes:
+      label: Should it offer a fix?
+      options:
+        - Detection only
+        - Detection and an approval-gated fix
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Microsoft guidance, CIS or CISA SCuBA items, incidents.
