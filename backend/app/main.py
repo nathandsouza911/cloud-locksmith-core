@@ -28,7 +28,10 @@ validate_demo_settings(settings)
 if settings.DEMO_MODE:
     install_outbound_block()
 
-app = FastAPI(title=settings.APP_NAME, version="0.1.0")
+# Release version; tests/test_version_consistency.py keeps README, compose and package.json in step.
+APP_VERSION = "0.1.2"
+
+app = FastAPI(title=settings.APP_NAME, version=APP_VERSION)
 logger = logging.getLogger(__name__)
 
 
@@ -146,7 +149,7 @@ from app.db.schema_guard import verify_required_schema
 
 @app.get("/")
 async def root():
-    return {"app": settings.APP_NAME, "version": "0.1.0"}
+    return {"app": settings.APP_NAME, "version": APP_VERSION}
 
 
 from app.api.v1.remediation_execution_eligibility import (
