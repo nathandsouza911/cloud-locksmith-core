@@ -40,6 +40,14 @@
   before and after state, each changed setting's before and after value, verification
   and rollback), and view one from **Remediation History** → **View change**. Suggested
   by the first public feedback. See `docs/remediation-lifecycle.md`.
+* Framework mapping corrected. Several CISA SCuBA references in the evidence report were
+  wrong (MS.AAD.3.3v1, 7.3v1 and 7.4v1 cited with statement text that is not in the
+  baseline). Every SCuBA reference now quotes cisagov/ScubaGear verbatim and is checked
+  at startup; 17 of 27 controls map to a SCuBA statement, graded direct, partial or
+  evidence, and shown in `docs/controls.md`. CIS benchmark numbers were inferred rather
+  than taken from the licensed benchmark, so they are no longer shown until verified.
+  The report says "maps to", never "compliant". The evidence PDF is now rendered for
+  real in CI.
 
 ## 0.1.1 (2026-11-13)
 

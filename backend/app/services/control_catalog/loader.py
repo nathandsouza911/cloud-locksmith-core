@@ -39,6 +39,7 @@ def validate_catalog(
     frameworks_doc: dict,
     mappings_doc: dict,
     crosswalks_doc: dict,
+    scuba_doc: dict | None = None,
 ) -> None:
     """Validate catalog consistency. Raises CatalogValidationError on any issue.
 
@@ -59,6 +60,7 @@ def validate_catalog(
             raise CatalogValidationError(f"framework {framework['id']!r} has invalid kind {framework['kind']!r}")
         framework_ids.add(framework["id"])
 
+    scuba_statements = (scuba_doc if scuba_doc is not None else _read_json("scuba_statements.json"))["statements"]
     valid_nist_functions = set((crosswalks_doc.get("nist_csf_to_iso27001") or {}).keys())
     baseline = set(MSP_SECURITY_BASELINE)
 
@@ -90,6 +92,17 @@ def validate_catalog(
                 raise CatalogValidationError(
                     f"mapping for {control_id!r} has invalid evidence_type {mapping['evidence_type']!r}"
                 )
+            if mapping["framework_id"] == "cisa-scuba":
+                statement = scuba_statements.get(mapping["reference_id"])
+                if statement is None:
+                    raise CatalogValidationError(
+                        f"mapping for {control_id!r} cites SCuBA {mapping['reference_id']!r}, "
+                        "which is not in scuba_statements.json"
+                    )
+                if mapping["report_label"] != statement:
+                    raise CatalogValidationError(
+                        f"mapping for {control_id!r}: SCuBA label must quote {mapping['reference_id']} verbatim"
+                    )
             for function in mapping.get("nist_csf_functions", []):
                 if function not in valid_nist_functions:
                     raise CatalogValidationError(
@@ -125,6 +138,11 @@ def mappings_doc() -> dict:
 
 def crosswalks_doc() -> dict:
     return _CROSSWALKS_DOC
+
+
+def is_verified(framework_id: str) -> bool:
+    """False only for frameworks explicitly marked ``"verified": false`` in frameworks.json."""
+    return (_FRAMEWORK_INDEX.get(framework_id) or {}).get("verified", True) is not False
 
 
 def list_frameworks() -> list[dict]:

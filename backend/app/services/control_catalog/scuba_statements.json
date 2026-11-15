@@ -1,0 +1,51 @@
+{
+  "_source": {
+    "repository": "https://github.com/cisagov/ScubaGear",
+    "files": [
+      "PowerShell/ScubaGear/baselines/aad.md",
+      "PowerShell/ScubaGear/baselines/exo.md"
+    ],
+    "branch": "main",
+    "retrieved": "2026-11-15",
+    "note": "Policy statements copied verbatim. aad.md: every statement. exo.md: only statements a control maps to or may map to. Re-check when ScubaGear publishes new baseline versions (IDs carry a version suffix)."
+  },
+  "statements": {
+    "MS.AAD.1.1v1": "Legacy authentication SHALL be blocked.",
+    "MS.AAD.2.1v1": "Users detected as high risk SHALL be blocked.",
+    "MS.AAD.2.2v1": "A notification SHOULD be sent to the administrator when high-risk users are detected.",
+    "MS.AAD.2.3v1": "Sign-ins detected as high-risk SHALL be blocked.",
+    "MS.AAD.3.1v1": "Phishing-resistant MFA SHALL be enforced for all users.",
+    "MS.AAD.3.2v2": "MFA SHALL be enforced for all users.",
+    "MS.AAD.3.3v2": "If Microsoft Authenticator is enabled, it SHALL be configured to show login context information.",
+    "MS.AAD.3.4v1": "The \"Authentication methods manage migration\" feature SHALL be set to \"Migration complete.\"",
+    "MS.AAD.3.5v2": "The authentication methods of short message service (SMS), voice call, and email one-time passcode (OTP) SHALL be disabled.",
+    "MS.AAD.3.6v1": "Phishing-resistant MFA SHALL be required for highly privileged roles.",
+    "MS.AAD.3.7v1": "Managed devices SHOULD be required for authentication.",
+    "MS.AAD.3.8v1": "Managed devices SHOULD be required to register MFA.",
+    "MS.AAD.3.9v1": "Device code authentication SHOULD be blocked.",
+    "MS.AAD.4.1v1": "Security logs SHALL be sent to the agency's security operations center for monitoring.",
+    "MS.AAD.5.1v1": "Only administrators SHALL be allowed to register applications.",
+    "MS.AAD.5.2v1": "User consent to applications SHALL be restricted.",
+    "MS.AAD.5.3v1": "An administrative consent workflow SHALL be configured for applications.",
+    "MS.AAD.5.5v1": "Application password addition SHOULD be blocked.",
+    "MS.AAD.5.6v1": "Application password lifetime SHOULD be restricted to 180 days or less.",
+    "MS.AAD.5.7v1": "Application certificate lifetime SHOULD be restricted to 365 days or less.",
+    "MS.AAD.6.1v1": "User passwords SHALL NOT expire.",
+    "MS.AAD.7.1v1": "A minimum of two users and a maximum of eight users SHALL be provisioned with the Global Administrator role.",
+    "MS.AAD.7.2v1": "Privileged users SHALL be provisioned with finer-grained roles instead of the Global Administrator role.",
+    "MS.AAD.7.3v1": "Privileged users SHALL be provisioned cloud-only accounts separate from an on-premises directory or other federated identity providers.",
+    "MS.AAD.7.4v1": "Permanent active role assignments SHALL NOT be allowed for highly privileged roles.",
+    "MS.AAD.7.5v1": "Provisioning users to highly privileged roles SHALL NOT occur outside of a PAM system.",
+    "MS.AAD.7.6v1": "Activation of the Global Administrator role SHALL require approval.",
+    "MS.AAD.7.7v1": "Eligible and active highly privileged role assignments SHALL trigger an alert.",
+    "MS.AAD.7.8v1": "User activation of the Global Administrator role SHALL trigger an alert.",
+    "MS.AAD.7.9v1": "User activation of other highly privileged roles SHOULD trigger an alert.",
+    "MS.AAD.8.1v1": "Guest users SHOULD have limited or restricted access to Microsoft Entra ID directory objects.",
+    "MS.AAD.8.2v1": "Only users with the \"Guest Inviter\" role SHOULD be able to invite guest users.",
+    "MS.AAD.8.3v1": "Guest invites SHOULD only be allowed to be sent to specific external domains that have been authorized by the agency for legitimate business purposes.",
+    "MS.AAD.9.1v1": "Risky AI agents SHALL be blocked.",
+    "MS.EXO.1.1v2": "Automatic forwarding to external domains SHALL be disabled.",
+    "MS.EXO.5.1v1": "SMTP AUTH SHALL be disabled.",
+    "MS.EXO.13.1v1": "Mailbox auditing SHALL be enabled."
+  }
+}

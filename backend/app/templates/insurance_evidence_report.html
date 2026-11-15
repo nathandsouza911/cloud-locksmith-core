@@ -214,8 +214,8 @@
 
   {% if report.framework_coverage %}
   <div class="section">
-    <h2 class="section-title">Compliance Framework Coverage</h2>
-    <p class="subtle">Coverage reflects how many <strong>mapped</strong> controls were evaluated and passing.</p>
+    <h2 class="section-title">Framework Mapping Coverage</h2>
+    <p class="subtle">How many evaluated controls <strong>map to</strong> each framework, and how many of those pass. A mapping is not a claim of compliance or certification.</p>
     <table>
       <thead><tr><th>Framework</th><th>Mapped Controls Evaluated</th><th>Passing</th><th>Failing</th></tr></thead>
       <tbody>
@@ -231,10 +231,10 @@
   <div class="section">
     <h2 class="section-title">Control Framework Mapping</h2>
     <table>
-      <thead><tr><th>Control</th><th>Status</th><th>Insurance</th><th>CIS</th><th>SCuBA</th><th>NIST CSF</th></tr></thead>
+      <thead><tr><th>Control</th><th>Status</th><th>Insurance</th><th>Maps to CISA SCuBA</th><th>NIST CSF</th></tr></thead>
       <tbody>
         {% for row in report.control_compliance %}
-        <tr><td>{{ row.control_id }}</td><td class="{{ 'status-pass' if row.passed else 'status-fail' }}">{{ 'Pass' if row.passed else 'Fail' }}</td><td>{{ row.insurance_category }}</td><td>{{ row.cis_refs }}</td><td>{{ row.scuba_refs }}</td><td>{{ row.nist_functions }}</td></tr>
+        <tr><td>{{ row.control_id }}</td><td class="{{ 'status-pass' if row.passed else 'status-fail' }}">{{ 'Pass' if row.passed else 'Fail' }}</td><td>{{ row.insurance_category }}</td><td>{{ row.scuba_refs }}</td><td>{{ row.nist_functions }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
