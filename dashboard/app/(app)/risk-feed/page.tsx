@@ -27,7 +27,6 @@ import {
   useFleetPosture,
   useRiskFeed,
   useSimulation,
-  useUsers,
 } from "@/lib/api/hooks";
 import { useAuth } from "@/lib/auth-context";
 import { startMicrosoftOAuth } from "@/lib/auth";
@@ -37,16 +36,9 @@ import {
   capabilityTooltip,
   resolveControlCapabilityWithFallback,
 } from "@/lib/control-capabilities";
-import { requireTenantIdentitySnapshot } from "@/lib/simulation";
 import { FloatingNotice } from "@/components/ui/FloatingNotice";
 import { canSimulateFix } from "@/lib/simulate-fix-controls";
-import type {
-  ComplianceResult,
-  ControlCapabilityDecision,
-  DirectoryUser,
-  RiskFeedItem,
-  Severity,
-} from "@/types";
+import type { ComplianceResult, ControlCapabilityDecision, RiskFeedItem, Severity } from "@/types";
 
 const SEV_ORDER: Severity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
 const SEV_COLOR: Record<string, string> = {
@@ -281,47 +273,6 @@ function buildCapabilityActionState(
   };
 }
 
-async function buildSimulationPayload(
-  risk: RiskFeedItem,
-  complianceResult: ComplianceResult | null | undefined,
-  tenantUsers: DirectoryUser[] | null,
-  usersError: string | null,
-) {
-  const tenantSnapshot = requireTenantIdentitySnapshot(tenantUsers, usersError);
-
-  const evidenceRecord = getEvidenceRecord(complianceResult ?? null);
-  const roleSource = getRoles({
-    available_roles: complianceResult?.available_roles ?? risk.available_roles,
-    current_roles: complianceResult?.current_roles ?? risk.current_roles,
-    evidence: complianceResult?.evidence,
-  });
-  const mappedRoles = mapRoleOptions(roleSource);
-
-  return {
-    tenant_snapshot: {
-      ...tenantSnapshot,
-    },
-    proposed_change: {
-      id: `sim-${risk.compliance_result_id}`,
-      conditions: {
-        users: {
-          includeUsers: risk.resource_type === "USER" ? [risk.resource_id] : [],
-          includeRoles: mappedRoles.map((role) => role.label),
-        },
-      },
-      grantControls: {
-        builtInControls: ["mfa"],
-      },
-      state: "enabled",
-      control_id: risk.control_id,
-      resource_id: risk.resource_id,
-      resource_name: risk.resource_name,
-      evidence: evidenceRecord,
-    },
-    role_mapping: tenantSnapshot.roles,
-  };
-}
-
 export default function RiskFeedPage() {
   const [severityFilter, setSeverityFilter] = useState("");
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -361,7 +312,6 @@ export default function RiskFeedPage() {
   const complianceQuery = useComplianceResults(effectiveTenantId);
   const capabilitiesQuery = useControlCapabilities(effectiveTenantId);
   const attackPathsQuery = useAttackPaths(effectiveTenantId);
-  const usersQuery = useUsers(effectiveTenantId);
 
   const feed = riskQuery.data ?? [];
   const isLoading = riskQuery.loading || capabilitiesQuery.loading;
@@ -430,13 +380,15 @@ export default function RiskFeedPage() {
     [rows, severityFilter, attackPathControlSet],
   );
 
-  async function handleSimulateFix(risk: RiskFeedItem, complianceResult?: ComplianceResult | null) {
+  async function handleSimulateFix(risk: RiskFeedItem) {
     setSimulationError(null);
     setActiveSimulationId(risk.compliance_result_id);
 
     try {
-      const payload = await buildSimulationPayload(risk, complianceResult, usersQuery.data, usersQuery.error);
-      await simulation.runSimulation(payload);
+      if (!canSimulateFix(risk.control_id)) throw new Error("This finding cannot be simulated.");
+      // The server reads the tenant's users, groups, roles and policies and builds the
+      // policy Apply would send; only the control is sent from here.
+      await simulation.runSimulation({ control_id: risk.control_id });
     } catch (error) {
       setSimulationError(error instanceof Error ? error.message : "Simulation failed");
     }
@@ -1339,9 +1291,8 @@ export default function RiskFeedPage() {
                                         variant="ghost"
                                         size="sm"
                                         loading={simulation.loading && isSimulationRowOpen}
-                                        disabled={usersQuery.loading}
                                         onClick={() => {
-                                          void handleSimulateFix(risk, complianceResult);
+                                          void handleSimulateFix(risk);
                                         }}
                                       >
                                         Simulate Fix

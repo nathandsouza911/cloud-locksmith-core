@@ -109,7 +109,7 @@ export default function SimulationPanel({
         </div>
       ) : (
         <>
-          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-4">
               <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500">Blocked Users</p>
               <p className="mt-2 text-sm font-semibold text-red-300">{simulation?.blocked_users ?? 0}</p>
@@ -119,6 +119,13 @@ export default function SimulationPanel({
               <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500">MFA Required</p>
               <p className="mt-2 text-sm font-semibold text-yellow-300">
                 {simulation?.mfa_required_users ?? 0}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-4">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500">Newly Affected</p>
+              <p className="mt-2 text-sm font-semibold text-cyan-300">
+                {simulation?.newly_affected_users ?? 0}
               </p>
             </div>
 
