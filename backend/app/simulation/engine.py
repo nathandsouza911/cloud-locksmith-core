@@ -36,22 +36,25 @@ class SimulationEngine:
         users = self._extract_users(tenant_snapshot.get("users", []))
         group_map = self._normalize_membership_map(tenant_snapshot.get("groups", {}))
         role_map = self._normalize_membership_map(tenant_snapshot.get("roles", {}))
+        guest_ids = frozenset(self._normalize_string_list(tenant_snapshot.get("guests") or []))
         expander = IdentityExpander(group_map=group_map, role_map=role_map)
+        baseline_policies = self.policy_parser.parse_many([policy for policy in policies if isinstance(policy, dict)])
 
-        decisions: list[dict[str, Any]] = []
-        for user_id in users:
-            applicable_policies = get_applicable_policies(
+        def decide(user_id: str, candidate_policies: list[ConditionalAccessPolicy]) -> dict[str, Any]:
+            return evaluate_user_access(
                 user_id=user_id,
-                policies=merged_policies,
-                group_map=group_map,
-                role_map=role_map,
+                applicable_policies=get_applicable_policies(
+                    user_id, candidate_policies, group_map, role_map, guest_ids=guest_ids
+                ),
             )
-            decisions.append(
-                evaluate_user_access(
-                    user_id=user_id,
-                    applicable_policies=applicable_policies,
-                )
-            )
+
+        decisions: list[dict[str, Any]] = [decide(user_id, merged_policies) for user_id in users]
+        # Users whose outcome the proposed change alters, compared to the tenant as it is.
+        newly_affected_users = sum(
+            1
+            for decision in decisions
+            if decide(decision["user_id"], baseline_policies)["result"] != decision["result"]
+        )
 
         blocked_user_ids = [decision["user_id"] for decision in decisions if decision["result"] == "BLOCKED"]
         mfa_required_user_ids = [decision["user_id"] for decision in decisions if decision["result"] == "MFA_REQUIRED"]
@@ -88,6 +91,7 @@ class SimulationEngine:
             "unaffected_users": len(unaffected_user_ids),
             "impacted_users": len(impacted_user_ids),
             "impacted_admins": impacted_admins,
+            "newly_affected_users": newly_affected_users,
             "conflicts": conflicts,
             "impact": impact,
         }
