@@ -117,10 +117,8 @@ async def test_any_read_failure_raises(patch_graph, path):
         await tr.read_tenant_identity(None, _Tenant())
 
 
-async def test_group_id_that_is_not_a_guid_is_refused(patch_graph):
-    patch_graph(
-        {tr.CA_POLICIES_PATH: [{"id": "p", "conditions": {"users": {"includeGroups": ["../users", "11111111-1111-4111-8111-111111111111
-"]}}}]}
-    )
+@pytest.mark.parametrize("bad_id", ["../users", G_EXCL + "\n", G_EXCL + "/members"])
+async def test_group_id_that_is_not_a_guid_is_refused(patch_graph, bad_id):
+    patch_graph({tr.CA_POLICIES_PATH: [{"id": "p", "conditions": {"users": {"includeGroups": [bad_id]}}}]})
     with pytest.raises(ValueError):
         await tr.read_tenant_identity(None, _Tenant())
