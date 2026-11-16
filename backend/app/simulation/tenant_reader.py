@@ -47,6 +47,15 @@ class TenantIdentity:
         return [u["id"] for u in self.users if u.get("id")]
 
 
+def graph_read_failure_detail(exc: GraphAPIError) -> dict[str, str]:
+    """HTTP 502 body for a failed read: the result is withheld, never built from partial data."""
+    return {
+        "code": "GRAPH_READ_FAILED",
+        "category": exc.category,
+        "message": "Could not read the tenant from Microsoft Graph, so no partial result is shown. Try again.",
+    }
+
+
 def role_members_path(role_object_id: str) -> str:
     return f"/directoryRoles/{_guid_or_raise(role_object_id)}/members?$select=id"
 
@@ -88,7 +97,10 @@ async def read_tenant_identity(db, tenant, *, extra_group_ids: Iterable[str] = (
         template_id: {
             "name": role_names[template_id],
             "member_ids": _dedupe(
-                [*role_user_ids[template_id], *(u for g in role_group_ids[template_id] for u in groups[g]["member_ids"])]
+                [
+                    *role_user_ids[template_id],
+                    *(u for g in role_group_ids[template_id] for u in groups[g]["member_ids"]),
+                ]
             ),
         }
         for template_id in role_names
@@ -123,7 +135,9 @@ def _policy_group_ids(policies: list[dict[str, Any]]) -> list[str]:
 
 
 def _ids_of(objects: list[dict[str, Any]], odata_type: str) -> list[str]:
-    return _dedupe([o["id"] for o in objects if isinstance(o, dict) and o.get("@odata.type") == odata_type and o.get("id")])
+    return _dedupe(
+        [o["id"] for o in objects if isinstance(o, dict) and o.get("@odata.type") == odata_type and o.get("id")]
+    )
 
 
 def _dedupe(values: Iterable[str]) -> list[str]:

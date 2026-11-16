@@ -123,3 +123,5 @@ def test_graph_failure_returns_502(client, db_session, org):
     with patch.object(sim_service, "read_tenant_identity", AsyncMock(side_effect=error)):
         resp = client.post(URL, json={"control_id": "CA_MFA_ALL_USERS"}, headers=_headers(db_session, org))
     assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "GRAPH_READ_FAILED"
+    assert "no partial" in resp.json()["detail"]["message"]

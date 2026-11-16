@@ -72,17 +72,19 @@ def test_graph_failure_returns_502_and_no_report(client, db_session, org):
     with patch.object(api, "read_tenant_identity", AsyncMock(side_effect=error)):
         resp = client.get(URL, headers=_headers(db_session, org))
     assert resp.status_code == 502
-    assert resp.json()["detail"] == {"code": "GRAPH_READ_FAILED", "category": "forbidden"}
+    detail = resp.json()["detail"]
+    assert detail["code"] == "GRAPH_READ_FAILED" and detail["category"] == "forbidden"
+    assert "no partial" in detail["message"]
 
 
 def test_csv_export_escapes_formula_cells(client, db_session, org):
-    with patch.object(api, "read_tenant_identity", AsyncMock(return_value=_identity("=HYPERLINK(\"x\")"))):
+    with patch.object(api, "read_tenant_identity", AsyncMock(return_value=_identity('=HYPERLINK("x")'))):
         resp = client.get(URL, params={"format": "csv"}, headers=_headers(db_session, org))
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/csv")
     assert "attachment" in resp.headers["content-disposition"]
     rows = list(csv.DictReader(io.StringIO(resp.text)))
-    assert rows[0]["display_name"] == "'=HYPERLINK(\"x\")"
+    assert rows[0]["display_name"] == '\'=HYPERLINK("x")'
     assert rows[0]["mfa_status"] == "gap"
     assert rows[0]["mfa_reasons"] == "No policy requires MFA for this user"
 

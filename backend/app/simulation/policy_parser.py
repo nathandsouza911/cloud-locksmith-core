@@ -35,9 +35,7 @@ def _narrowing_conditions(conditions: dict[str, Any]) -> list[str]:
     """Names of the conditions that make a policy apply only to some sign-ins."""
     found: list[str] = []
     locations = conditions.get("locations") or {}
-    if locations and (
-        (locations.get("includeLocations") or ["All"]) != ["All"] or locations.get("excludeLocations")
-    ):
+    if locations and ((locations.get("includeLocations") or ["All"]) != ["All"] or locations.get("excludeLocations")):
         found.append("locations")
     platforms = conditions.get("platforms") or {}
     if platforms and (

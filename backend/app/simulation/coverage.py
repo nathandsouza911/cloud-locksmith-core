@@ -33,8 +33,7 @@ LIMITS = [
     "Users who hold a role through a role-assignable group are counted as holding it.",
     "A policy that targets guests or external users is not counted as covering them; a "
     "guest exclusion is applied to every guest.",
-    "Security defaults, when on, are reported as covering MFA and legacy authentication "
-    "for every user.",
+    "Security defaults, when on, are reported as covering MFA and legacy authentication " "for every user.",
 ]
 
 

@@ -8,6 +8,7 @@ from app.db.session import get_sync_db
 from app.services.graph_client import GraphAPIError
 from app.simulation.models import SimulationRunRequest, SimulationRunResponse
 from app.simulation.service import SimulationService, check_simulation_control
+from app.simulation.tenant_reader import graph_read_failure_detail
 
 
 router = APIRouter(
@@ -31,8 +32,6 @@ async def run_simulation(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
-        return await SimulationService().run_for_tenant(
-            db=db, tenant=current_tenant, control_id=request.control_id
-        )
+        return await SimulationService().run_for_tenant(db=db, tenant=current_tenant, control_id=request.control_id)
     except GraphAPIError as exc:
-        raise HTTPException(status_code=502, detail={"code": "GRAPH_READ_FAILED", "category": exc.category}) from exc
+        raise HTTPException(status_code=502, detail=graph_read_failure_detail(exc)) from exc

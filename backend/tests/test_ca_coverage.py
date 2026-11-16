@@ -7,10 +7,28 @@ GA = "62e90394-69f5-4237-9190-012177145e10"  # Global Administrator template (pr
 READER = "88d8e3e3-8f55-4a1e-953a-9b9898b8876b"  # Directory Readers template (not privileged)
 
 USERS = [
-    {"id": "admin", "displayName": "Admin", "userPrincipalName": "admin@x", "accountEnabled": True, "userType": "Member"},
-    {"id": "alice", "displayName": "Alice", "userPrincipalName": "alice@x", "accountEnabled": True, "userType": "Member"},
+    {
+        "id": "admin",
+        "displayName": "Admin",
+        "userPrincipalName": "admin@x",
+        "accountEnabled": True,
+        "userType": "Member",
+    },
+    {
+        "id": "alice",
+        "displayName": "Alice",
+        "userPrincipalName": "alice@x",
+        "accountEnabled": True,
+        "userType": "Member",
+    },
     {"id": "bob", "displayName": "Bob", "userPrincipalName": "bob@x", "accountEnabled": True, "userType": "Member"},
-    {"id": "guest", "displayName": "Guest", "userPrincipalName": "g#EXT#@x", "accountEnabled": True, "userType": "Guest"},
+    {
+        "id": "guest",
+        "displayName": "Guest",
+        "userPrincipalName": "g#EXT#@x",
+        "accountEnabled": True,
+        "userType": "Guest",
+    },
 ]
 
 
@@ -28,7 +46,10 @@ def _identity(policies, *, security_defaults=False, groups=None):
         users=USERS,
         policies=policies,
         groups=groups or {"g-ex": {"name": "CA exclusions", "member_ids": ["bob"]}},
-        roles={GA: {"name": "Global Administrator", "member_ids": ["admin"]}, READER: {"name": "Directory Readers", "member_ids": ["alice"]}},
+        roles={
+            GA: {"name": "Global Administrator", "member_ids": ["admin"]},
+            READER: {"name": "Directory Readers", "member_ids": ["alice"]},
+        },
         security_defaults_enabled=security_defaults,
     )
 
@@ -54,7 +75,9 @@ def test_all_users_mfa_policy_with_group_exclusion():
 
 
 def test_report_only_policy_is_reported_separately():
-    report = build_coverage(_identity([_policy("MFA all", {"includeUsers": ["All"]}, state="enabledForReportingButNotEnforced")]))
+    report = build_coverage(
+        _identity([_policy("MFA all", {"includeUsers": ["All"]}, state="enabledForReportingButNotEnforced")])
+    )
     alice = _user(report, "alice")["mfa"]
     assert alice["status"] == "report_only"
     assert alice["policies"] == ["MFA all"]
@@ -68,8 +91,16 @@ def test_disabled_policy_is_named_in_the_reason():
 def test_policy_that_does_not_cover_every_sign_in_is_a_gap_with_reason():
     policies = [
         _policy("Some apps", {"includeUsers": ["All"]}, apps={"includeApplications": ["app-1"]}),
-        _policy("Excl apps", {"includeUsers": ["All"]}, apps={"includeApplications": ["All"], "excludeApplications": ["app-2"]}),
-        _policy("Untrusted only", {"includeUsers": ["All"]}, conditions={"locations": {"includeLocations": ["All"], "excludeLocations": ["AllTrusted"]}}),
+        _policy(
+            "Excl apps",
+            {"includeUsers": ["All"]},
+            apps={"includeApplications": ["All"], "excludeApplications": ["app-2"]},
+        ),
+        _policy(
+            "Untrusted only",
+            {"includeUsers": ["All"]},
+            conditions={"locations": {"includeLocations": ["All"], "excludeLocations": ["AllTrusted"]}},
+        ),
         _policy("Or device", {"includeUsers": ["All"]}, grant=("mfa", "compliantDevice")),
         _policy("Browser only", {"includeUsers": ["All"]}, conditions={"clientAppTypes": ["browser"]}),
     ]
@@ -85,15 +116,27 @@ def test_policy_that_does_not_cover_every_sign_in_is_a_gap_with_reason():
 
 
 def test_and_grant_and_authentication_strength_require_mfa():
-    report = build_coverage(_identity([_policy("And", {"includeUsers": ["alice"]}, grant=("mfa", "compliantDevice"), operator="AND")]))
+    report = build_coverage(
+        _identity([_policy("And", {"includeUsers": ["alice"]}, grant=("mfa", "compliantDevice"), operator="AND")])
+    )
     assert _user(report, "alice")["mfa"]["status"] == "covered"
-    report = build_coverage(_identity([_policy("Strength", {"includeUsers": ["bob"]}, grant=(), strength={"id": "phish"})]))
+    report = build_coverage(
+        _identity([_policy("Strength", {"includeUsers": ["bob"]}, grant=(), strength={"id": "phish"})])
+    )
     assert _user(report, "bob")["mfa"]["status"] == "covered"
 
 
 def test_guest_exclusion_reason():
-    policy = _policy("MFA all", {"includeUsers": ["All"], "excludeGuestsOrExternalUsers": {"guestOrExternalUserTypes": "b2bCollaborationGuest"}})
-    assert _user(build_coverage(_identity([policy])), "guest")["mfa"]["reasons"] == ["Excluded from 'MFA all' as a guest"]
+    policy = _policy(
+        "MFA all",
+        {
+            "includeUsers": ["All"],
+            "excludeGuestsOrExternalUsers": {"guestOrExternalUserTypes": "b2bCollaborationGuest"},
+        },
+    )
+    assert _user(build_coverage(_identity([policy])), "guest")["mfa"]["reasons"] == [
+        "Excluded from 'MFA all' as a guest"
+    ]
 
 
 def test_admin_question_only_for_privileged_roles_and_role_exclusion_named():
@@ -109,11 +152,18 @@ def test_admin_question_only_for_privileged_roles_and_role_exclusion_named():
 
 
 def test_legacy_auth_block_requires_both_client_types():
-    both = _policy("Block legacy", {"includeUsers": ["All"], "excludeUsers": ["bob"]}, grant=("block",), conditions={"clientAppTypes": ["exchangeActiveSync", "other"]})
+    both = _policy(
+        "Block legacy",
+        {"includeUsers": ["All"], "excludeUsers": ["bob"]},
+        grant=("block",),
+        conditions={"clientAppTypes": ["exchangeActiveSync", "other"]},
+    )
     report = build_coverage(_identity([both]))
     assert _user(report, "alice")["legacy_auth"]["status"] == "covered"
     assert _user(report, "bob")["legacy_auth"]["reasons"] == ["Excluded from 'Block legacy' directly"]
-    one = _policy("EAS only", {"includeUsers": ["All"]}, grant=("block",), conditions={"clientAppTypes": ["exchangeActiveSync"]})
+    one = _policy(
+        "EAS only", {"includeUsers": ["All"]}, grant=("block",), conditions={"clientAppTypes": ["exchangeActiveSync"]}
+    )
     assert _user(build_coverage(_identity([one])), "alice")["legacy_auth"]["reasons"] == [
         "'EAS only' blocks only exchangeActiveSync, not other"
     ]

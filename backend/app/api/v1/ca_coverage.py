@@ -19,7 +19,7 @@ from app.db.models.tenant import Tenant
 from app.db.session import get_sync_db
 from app.services.graph_client import GraphAPIError
 from app.simulation.coverage import build_coverage
-from app.simulation.tenant_reader import read_tenant_identity
+from app.simulation.tenant_reader import graph_read_failure_detail, read_tenant_identity
 
 router = APIRouter(prefix="/ca-coverage", tags=["Conditional Access coverage"])
 
@@ -46,7 +46,7 @@ async def get_ca_coverage(
         identity = await read_tenant_identity(db, current_tenant)
     except GraphAPIError as exc:
         # Never report from partial data.
-        raise HTTPException(status_code=502, detail={"code": "GRAPH_READ_FAILED", "category": exc.category}) from exc
+        raise HTTPException(status_code=502, detail=graph_read_failure_detail(exc)) from exc
 
     report = build_coverage(identity)
     if format == "json":

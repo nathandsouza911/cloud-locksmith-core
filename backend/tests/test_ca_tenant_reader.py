@@ -26,7 +26,13 @@ def _graph(overrides=None):
         ],
         tr.SECURITY_DEFAULTS_PATH: {"isEnabled": False},
         tr.USERS_PATH: [{"id": "u1", "userType": "Member"}, {"id": "u2", "userType": "Guest"}],
-        "/directoryRoles": [{"id": "44444444-4444-4444-8444-444444444444", "displayName": "Global Administrator", "roleTemplateId": GA_TEMPLATE}],
+        "/directoryRoles": [
+            {
+                "id": "44444444-4444-4444-8444-444444444444",
+                "displayName": "Global Administrator",
+                "roleTemplateId": GA_TEMPLATE,
+            }
+        ],
         "/directoryRoles/44444444-4444-4444-8444-444444444444/members?$select=id": [
             {"@odata.type": USER, "id": "u1"},
             {"@odata.type": GROUP, "id": G_ROLE},
