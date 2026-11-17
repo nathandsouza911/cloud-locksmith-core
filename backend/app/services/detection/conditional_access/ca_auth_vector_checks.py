@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from app.services.graph.tenant_graph_context import TenantGraphContext
 from app.services.detection.conditional_access.ca_helpers import (
+    is_block_grant,
     is_effective_policy,
     is_policy_enabled,
     normalize_transfer_methods,
+    targets_all_users,
 )
 from app.services.detection.conditional_access.constants import (
     AUTHENTICATION_TRANSFER_METHOD,
@@ -15,49 +17,49 @@ from app.services.detection.conditional_access.constants import (
 
 async def detect_ca_legacy_auth_other_blocked(*, ctx: TenantGraphContext) -> list[dict]:
     """
-    CA-09: Verify at least one enabled CA policy blocks legacy auth client types
-    (exchangeActiveSync and/or other) for all cloud apps.
-    Returns a single TENANT-scoped finding.
+    CA-09: Verify enabled CA policies block BOTH legacy auth client types
+    (exchangeActiveSync and other) for all users and all cloud apps. The two
+    types may be blocked by different policies. Only an explicit "block" grant
+    counts. Returns a single TENANT-scoped finding.
     """
     if ctx.conditional_access_policies is None:
         return []
 
     blocking_policy_ids: list[str] = []
+    blocked_types: set[str] = set()
     for policy in ctx.conditional_access_policies:
         if not is_policy_enabled(policy) or not is_effective_policy(policy):
             continue
-
-        conditions = policy.get("conditions") or {}
-        client_app_types: list[str] = conditions.get("clientAppTypes") or []
-
-        # Must target at least one legacy auth type
-        if not LEGACY_AUTH_CLIENT_APP_TYPES.intersection(client_app_types):
+        if not targets_all_users(policy):
             continue
 
-        # Must apply to all cloud apps
+        conditions = policy.get("conditions") or {}
+        legacy_types = LEGACY_AUTH_CLIENT_APP_TYPES.intersection(conditions.get("clientAppTypes") or [])
+        if not legacy_types:
+            continue
+
         include_apps = (conditions.get("applications") or {}).get("includeApplications") or []
         if "All" not in include_apps:
             continue
 
-        # Grant must be a block (null grantControls = implicit block, or explicit "block")
-        grant = policy.get("grantControls")
-        is_block = grant is None or "block" in (grant.get("builtInControls") or [])
-        if not is_block:
+        if not is_block_grant(policy.get("grantControls")):
             continue
 
         pid = policy.get("id") or policy.get("displayName") or "<unnamed>"
         blocking_policy_ids.append(str(pid))
+        blocked_types.update(legacy_types)
 
-    passed = bool(blocking_policy_ids)
+    unblocked = sorted(LEGACY_AUTH_CLIENT_APP_TYPES - blocked_types)
     return [
         {
             "control_id": "CA_LEGACY_AUTH_BLOCK",
             "resource_type": "TENANT",
             "resource_id": ctx.tenant_id,
-            "passed": passed,
+            "passed": not unblocked,
             "severity": "HIGH",
             "evidence": {
                 "blocking_policy_ids": blocking_policy_ids,
+                "unblocked_client_app_types": unblocked,
                 "total_policies_evaluated": len(ctx.conditional_access_policies),
             },
         }
