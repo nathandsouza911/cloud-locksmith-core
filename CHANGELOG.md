@@ -14,6 +14,12 @@
   This affected the device code flow, authentication transfer and high-risk sign-in
   checks as well. Policies created by Apply always send an explicit block and still pass.
 
+* **Device code flow, authentication transfer, high-risk sign-in and risk-based MFA
+  checks require a policy for all users.** A blocking (or MFA) policy that targeted only
+  some users or groups passed the tenant-level check, leaving everyone else uncovered.
+  Exclusions such as break-glass accounts are still allowed. Policies created by Apply
+  include all users and still pass.
+
 ## 0.1.2 (2026-11-15)
 
 * The API (`GET /` and the OpenAPI page) and the dashboard package now report the release

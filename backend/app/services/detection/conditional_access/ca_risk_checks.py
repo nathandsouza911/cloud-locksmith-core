@@ -21,6 +21,7 @@ from app.services.detection.conditional_access.ca_helpers import (
     is_effective_policy,
     is_mfa_grant,
     is_policy_enabled,
+    targets_all_users,
 )
 
 
@@ -44,6 +45,8 @@ async def detect_ca_high_risk_sign_in_block(*, ctx: TenantGraphContext) -> list[
     matching_policy_ids: list[str] = []
     for policy in ctx.conditional_access_policies:
         if not is_policy_enabled(policy) or not is_effective_policy(policy):
+            continue
+        if not targets_all_users(policy):  # a policy for some users leaves the rest uncovered
             continue
         if not _targets_all_apps(policy):
             continue
@@ -88,6 +91,8 @@ async def detect_ca_risk_based_step_up_mfa(*, ctx: TenantGraphContext) -> list[d
 
     for policy in ctx.conditional_access_policies:
         if not is_policy_enabled(policy) or not is_effective_policy(policy):
+            continue
+        if not targets_all_users(policy):  # a policy for some users leaves the rest uncovered
             continue
         if not _targets_all_apps(policy):
             continue

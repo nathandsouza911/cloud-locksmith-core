@@ -515,3 +515,55 @@ def test_legacy_auth_still_evaluates_policies_when_security_defaults_off():
     )
     results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=ctx))
     assert results[0]["passed"] is False
+
+
+# ---------------------------------------------------------------------------
+# Tenant-level block/MFA checks require a policy that includes all users
+# ---------------------------------------------------------------------------
+
+ONE_GROUP = {"includeGroups": ["11111111-1111-1111-1111-111111111111"]}
+
+
+def _scoped(pid: str, users: dict, grant: list[str], **conditions) -> dict:
+    return {
+        "id": pid,
+        "state": "enabled",
+        "conditions": {"users": users, "applications": {"includeApplications": ["All"]}, **conditions},
+        "grantControls": {"operator": "OR", "builtInControls": grant},
+    }
+
+
+def _run(detector, policies):
+    return asyncio.run(detector(ctx=_ctx(policies)))[0]["passed"]
+
+
+def test_device_code_fail_when_block_targets_only_some_users():
+    flows = {"authenticationFlows": {"transferMethods": ["deviceCodeFlow"]}}
+    assert _run(detect_ca_device_code_flow_blocked, [_scoped("p", ONE_GROUP, ["block"], **flows)]) is False
+    all_users = {"includeUsers": ["All"], "excludeUsers": ["22222222-2222-2222-2222-222222222222"]}
+    assert _run(detect_ca_device_code_flow_blocked, [_scoped("p", all_users, ["block"], **flows)]) is True
+
+
+def test_authentication_transfer_fail_when_block_targets_only_some_users():
+    flows = {"authenticationFlows": {"transferMethods": ["authenticationTransfer"]}}
+    assert _run(detect_ca_authentication_transfer_blocked, [_scoped("p", ONE_GROUP, ["block"], **flows)]) is False
+    assert (
+        _run(detect_ca_authentication_transfer_blocked, [_scoped("p", {"includeUsers": ["All"]}, ["block"], **flows)])
+        is True
+    )
+
+
+def test_high_risk_sign_in_block_fail_when_targets_only_some_users():
+    from app.services.detection.conditional_access.ca_risk_checks import detect_ca_high_risk_sign_in_block
+
+    risk = {"signInRiskLevels": ["high"]}
+    assert _run(detect_ca_high_risk_sign_in_block, [_scoped("p", ONE_GROUP, ["block"], **risk)]) is False
+    assert _run(detect_ca_high_risk_sign_in_block, [_scoped("p", {"includeUsers": ["All"]}, ["block"], **risk)]) is True
+
+
+def test_risk_based_step_up_mfa_fail_when_targets_only_some_users():
+    from app.services.detection.conditional_access.ca_risk_checks import detect_ca_risk_based_step_up_mfa
+
+    risk = {"signInRiskLevels": ["medium", "high"]}
+    assert _run(detect_ca_risk_based_step_up_mfa, [_scoped("p", ONE_GROUP, ["mfa"], **risk)]) is False
+    assert _run(detect_ca_risk_based_step_up_mfa, [_scoped("p", {"includeUsers": ["All"]}, ["mfa"], **risk)]) is True
