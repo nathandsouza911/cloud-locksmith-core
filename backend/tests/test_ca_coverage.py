@@ -69,7 +69,12 @@ def test_no_policies_every_user_has_gaps_with_reason():
 
 def test_all_users_mfa_policy_with_group_exclusion():
     report = build_coverage(_identity([_policy("MFA all", {"includeUsers": ["All"], "excludeGroups": ["g-ex"]})]))
-    assert _user(report, "alice")["mfa"] == {"status": "covered", "policies": ["MFA all"], "reasons": []}
+    assert _user(report, "alice")["mfa"] == {
+        "status": "covered",
+        "policies": ["MFA all"],
+        "reasons": [],
+        "policy_ids": ["MFA all"],
+    }
     assert _user(report, "bob")["mfa"]["status"] == "gap"
     assert _user(report, "bob")["mfa"]["reasons"] == ["Excluded from 'MFA all' by group 'CA exclusions'"]
 
@@ -181,7 +186,7 @@ def test_security_defaults_cover_mfa_and_legacy_for_everyone():
     report = build_coverage(_identity([], security_defaults=True))
     assert report["security_defaults_enabled"] is True
     for user in report["users"]:
-        assert user["mfa"] == {"status": "covered", "policies": ["Security defaults"], "reasons": []}
+        assert user["mfa"] == {"status": "covered", "policies": ["Security defaults"], "reasons": [], "policy_ids": []}
         assert user["legacy_auth"]["status"] == "covered"
 
 

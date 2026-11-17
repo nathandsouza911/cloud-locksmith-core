@@ -92,7 +92,7 @@ def build_coverage(identity: TenantIdentity) -> dict[str, Any]:
 
 
 def _evaluate(policies, matches, names, problems_of, no_policy_reason: str) -> dict[str, Any]:
-    enforced, report_only, reasons = [], [], []
+    enforced, report_only, reasons, enforced_ids, report_only_ids = [], [], [], [], []
     for policy, match in zip(policies, matches):
         problems = problems_of(policy)
         if problems is None:  # not a policy for this question
@@ -109,14 +109,16 @@ def _evaluate(policies, matches, names, problems_of, no_policy_reason: str) -> d
         state = policy.state.lower()
         if state == _ENABLED:
             enforced.append(names.plain(policy))
+            enforced_ids.append(policy.id)
         elif state == _REPORT_ONLY_STATE:
             report_only.append(names.plain(policy))
+            report_only_ids.append(policy.id)
         elif state == _DISABLED:
             reasons.append(f"{label} would cover this user but is turned off")
     if enforced:
-        return _result(COVERED, enforced, [])
+        return _result(COVERED, enforced, [], enforced_ids)
     if report_only:
-        return _result(REPORT_ONLY, report_only, reasons)
+        return _result(REPORT_ONLY, report_only, reasons, report_only_ids)
     return _result(GAP, [], reasons or [no_policy_reason])
 
 
@@ -163,8 +165,9 @@ def _legacy_problems(policy: ConditionalAccessPolicy) -> list[str] | None:
     return problems
 
 
-def _result(status: str, policies: list[str], reasons: list[str]) -> dict[str, Any]:
-    return {"status": status, "policies": policies, "reasons": reasons}
+def _result(status: str, policies: list[str], reasons: list[str], policy_ids: list[str] | None = None) -> dict[str, Any]:
+    # ``policies`` are display names for people; ``policy_ids`` the matching policy IDs.
+    return {"status": status, "policies": policies, "reasons": reasons, "policy_ids": list(policy_ids or [])}
 
 
 def _count(rows, key, statuses) -> dict[str, int]:
