@@ -37,5 +37,7 @@ class SimulationRunResponse(BaseModel):
     impacted_users: int
     impacted_admins: int
     newly_affected_users: int = 0
+    # Conditional Access policies are not enforced while security defaults are on.
+    security_defaults_enabled: bool = False
     conflicts: list[SimulationConflict] = Field(default_factory=list)
     impact: SimulationImpact

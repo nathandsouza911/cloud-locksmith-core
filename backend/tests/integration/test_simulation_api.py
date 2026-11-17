@@ -70,6 +70,7 @@ def test_mfa_all_users_counts_existing_policies_and_break_glass(client, db_sessi
     # existing policy.
     assert body["newly_affected_users"] == 2
     assert body["unaffected_users"] == 0
+    assert body["security_defaults_enabled"] is False
 
 
 def test_mfa_admins_targets_privileged_roles_by_template_id(client, db_session, org):
@@ -125,3 +126,24 @@ def test_graph_failure_returns_502(client, db_session, org):
     assert resp.status_code == 502
     assert resp.json()["detail"]["code"] == "GRAPH_READ_FAILED"
     assert "no partial" in resp.json()["detail"]["message"]
+
+
+def _security_defaults_identity():
+    identity = _identity()
+    identity.policies = []
+    identity.security_defaults_enabled = True
+    return identity
+
+
+@pytest.mark.parametrize("control_id", ["CA_MFA_ALL_USERS", "CA_MFA_ADMINS"])
+def test_security_defaults_users_are_already_under_mfa(client, db_session, org, control_id):
+    # Security defaults already require MFA for every user, so an MFA fix makes no one's
+    # access stricter than it is today (live run 2026-11-17 reported 12 of 14).
+    reader = AsyncMock(return_value=_security_defaults_identity())
+    with patch.object(sim_service, "read_tenant_identity", reader):
+        resp = client.post(URL, json={"control_id": control_id}, headers=_headers(db_session, org))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["newly_affected_users"] == 0
+    assert body["security_defaults_enabled"] is True
+    assert body["mfa_required_users"] > 0  # the policy itself still requires MFA once enforced

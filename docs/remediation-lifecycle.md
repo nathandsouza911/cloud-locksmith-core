@@ -21,7 +21,10 @@ template ID, existing Conditional Access policies), builds the same policy Apply
 send (enforced, the control's default rollout, registered break-glass accounts
 excluded), and evaluates it together with the existing policies. It reports how many
 users would be required to use MFA, blocked or unaffected, how many of them the fix
-newly affects, and how many admins are affected. Identity data sent by the browser is
+newly affects (users whose access becomes stricter than it is today; with security
+defaults on, every user already counts as required to use MFA), and how many admins are
+affected. With security defaults on it also warns that Conditional Access policies are not
+enforced until security defaults are turned off. Identity data sent by the browser is
 refused; if any Graph read fails the answer is an error, never a partial result. It
 calls no Graph write endpoint.
 

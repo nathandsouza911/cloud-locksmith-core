@@ -508,6 +508,8 @@ export type SimulationRunResponse = {
   impacted_admins: number;
   /** Users whose outcome the fix changes, compared to the tenant as it is. */
   newly_affected_users: number;
+  /** Conditional Access policies are not enforced while security defaults are on. */
+  security_defaults_enabled?: boolean;
   conflicts: Array<{
     type: string;
     policy_ids?: Array<string | null>;

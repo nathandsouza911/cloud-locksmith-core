@@ -52,5 +52,8 @@ class SimulationService:
             proposed_change=proposed,
             # Admin impact is reported by role name.
             role_mapping={role["name"]: list(role["member_ids"]) for role in identity.roles.values()},
+            # Security defaults already require MFA for every user (as on the CA Coverage page).
+            baseline_floor="MFA_REQUIRED" if identity.security_defaults_enabled else None,
         )
+        result["security_defaults_enabled"] = identity.security_defaults_enabled
         return SimulationRunResponse.model_validate(result)

@@ -20,7 +20,10 @@
   group members, with roles matched by name rather than role template ID, and with a
   proposed policy that differed from the one Apply sends. The request is now
   `{"control_id": ...}` only (other fields are refused); the result adds
-  `newly_affected_users`.
+  `newly_affected_users` (users whose access the fix makes stricter; with security defaults
+  on, every user already counts as required to use MFA) and `security_defaults_enabled`,
+  with a warning that Conditional Access policies are not enforced while security
+  defaults stay on.
 
 ## 0.1.2 (2026-11-15)
 

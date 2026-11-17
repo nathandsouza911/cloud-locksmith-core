@@ -118,8 +118,11 @@ accounts; runs the engine with the tenant's real policies, groups and roles. Old
 (`tenant_snapshot`, `role_mapping`, `proposed_change`) are rejected (400) so a stale client
 cannot send data the server would ignore silently.
 
-Response adds `newly_affected_users` (users whose result changes compared to the tenant
-without the fix). Admin counts use role template IDs.
+Response adds `newly_affected_users` (users whose access becomes stricter than the tenant
+without the fix; under security defaults every user is already MFA_REQUIRED) and
+`security_defaults_enabled` (the dashboard warns that CA policies are not enforced while
+they are on). Added after the 2026-11-17 live run reported 12 of 14 users newly affected on
+a security-defaults tenant. Admin counts use role template IDs.
 
 Dashboard: Risk Feed and Settings send `{control_id}`; `lib/simulation.ts` snapshot
 builder and the unused `PolicyEditor` (it never sent `control_id`, so the backend always
