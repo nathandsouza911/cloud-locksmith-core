@@ -76,24 +76,12 @@ async def _scan(monkeypatch, *, policies, groups=None, read_error=None) -> dict[
             roles={GA: {"name": "Global Administrator", "member_ids": [ADMIN]}},
         )
 
-    # Old data sources (before this change) fed the same tenant, so the test shows the
-    # old behaviour rather than failing for an unrelated reason.
-    async def old_policies(db, tenant):
-        if read_error is not None:
-            raise read_error
-        return policies
-
-    async def old_group_map(db, tenant, pols):
-        return {}  # include groups only, and a failed read became empty
-
     monkeypatch.setattr(identity_scan_service, "upsert_control_result", fake_upsert)
     monkeypatch.setattr(identity_scan_service, "list_break_glass_user_ids_async", none_async)
     monkeypatch.setattr(identity_scan_service, "_build_role_map", role_map)
     monkeypatch.setattr(identity_scan_service, "resolve_findings_async", zero)
     monkeypatch.setattr(identity_scan_service, "fetch_security_defaults_enabled", security_defaults_off)
-    monkeypatch.setattr(identity_scan_service, "read_tenant_identity", read_identity, raising=False)
-    monkeypatch.setattr(identity_scan_service, "fetch_conditional_access_policies", old_policies, raising=False)
-    monkeypatch.setattr(identity_scan_service, "build_ca_group_member_map", old_group_map, raising=False)
+    monkeypatch.setattr(identity_scan_service, "read_tenant_identity", read_identity)
 
     await identity_scan_service.run_user_controls(
         db=object(),

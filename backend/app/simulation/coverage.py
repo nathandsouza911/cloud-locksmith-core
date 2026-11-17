@@ -165,7 +165,9 @@ def _legacy_problems(policy: ConditionalAccessPolicy) -> list[str] | None:
     return problems
 
 
-def _result(status: str, policies: list[str], reasons: list[str], policy_ids: list[str] | None = None) -> dict[str, Any]:
+def _result(
+    status: str, policies: list[str], reasons: list[str], policy_ids: list[str] | None = None
+) -> dict[str, Any]:
     # ``policies`` are display names for people; ``policy_ids`` the matching policy IDs.
     return {"status": status, "policies": policies, "reasons": reasons, "policy_ids": list(policy_ids or [])}
 

@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.session import AsyncSessionLocal
 from app.services.tenant_service import get_tenant
-from app.services.ca_mfa_evaluator import is_mfa_policy
 from app.simulation.coverage import COVERED, REPORT_ONLY, build_coverage
 from app.simulation.tenant_reader import read_tenant_identity
 from app.services.activity.unused_account_detector import evaluate_unused_account
@@ -737,12 +736,12 @@ async def run_tenant_controls(
         except Exception:
             logger.exception("app_secret_expiry_detection_failed tenant_id=%s", tenant_id)
     if "IDENTITY_BREAK_GLASS_ACCOUNT" in baseline_controls:
-        control_results.append(
-            await detect_break_glass_accounts(
-                db=db,
-                tenant=tenant,
-            )
-        )
+        try:
+            control_results.append(await detect_break_glass_accounts(db=db, tenant=tenant))
+        except Exception:
+            # The detector reads the tenant fail-closed; no result (never a pass) when it
+            # cannot, and the other tenant controls are still saved.
+            logger.exception("break_glass_detection_failed tenant_id=%s", tenant_id)
     if settings.CLX_INJECT_TEST_TENANT_CONTROL:
         control_results.append(
             {
