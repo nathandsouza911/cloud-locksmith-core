@@ -449,3 +449,42 @@ def test_guest_mfa_fail_when_policy_not_broad_enough():
     ctx = _ctx([policy])
     results = asyncio.run(detect_ca_guest_mfa(ctx=ctx))
     assert results[0]["passed"] is False
+
+
+# ---------------------------------------------------------------------------
+# null grantControls is not a block (Graph: session-control-only policy grants access)
+# ---------------------------------------------------------------------------
+
+
+def _all_users_all_apps(pid: str, **conditions) -> dict:
+    return {
+        "id": pid,
+        "state": "enabled",
+        "conditions": {
+            "users": {"includeUsers": ["All"]},
+            "applications": {"includeApplications": ["All"]},
+            **conditions,
+        },
+        "grantControls": None,
+        "sessionControls": {"signInFrequency": {"isEnabled": True, "value": 1, "type": "hours"}},
+    }
+
+
+def test_device_code_fail_when_grant_controls_null():
+    policy = _all_users_all_apps("p-dcf-null", authenticationFlows={"transferMethods": ["deviceCodeFlow"]})
+    results = asyncio.run(detect_ca_device_code_flow_blocked(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False
+
+
+def test_authentication_transfer_fail_when_grant_controls_null():
+    policy = _all_users_all_apps("p-at-null", authenticationFlows={"transferMethods": ["authenticationTransfer"]})
+    results = asyncio.run(detect_ca_authentication_transfer_blocked(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False
+
+
+def test_high_risk_sign_in_block_fail_when_grant_controls_null():
+    from app.services.detection.conditional_access.ca_risk_checks import detect_ca_high_risk_sign_in_block
+
+    policy = _all_users_all_apps("p-risk-null", signInRiskLevels=["high"])
+    results = asyncio.run(detect_ca_high_risk_sign_in_block(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False

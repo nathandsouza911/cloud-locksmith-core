@@ -94,9 +94,7 @@ async def detect_ca_device_code_flow_blocked(*, ctx: TenantGraphContext) -> list
             continue
 
         # Grant must be a block
-        grant = policy.get("grantControls")
-        is_block = grant is None or "block" in (grant.get("builtInControls") or [])
-        if not is_block:
+        if not is_block_grant(policy.get("grantControls")):
             continue
 
         pid = policy.get("id") or policy.get("displayName") or "<unnamed>"
@@ -141,9 +139,7 @@ async def detect_ca_authentication_transfer_blocked(*, ctx: TenantGraphContext) 
         if AUTHENTICATION_TRANSFER_METHOD not in transfer_methods:
             continue
 
-        grant = policy.get("grantControls")
-        is_block = grant is None or "block" in (grant.get("builtInControls") or [])
-        if not is_block:
+        if not is_block_grant(policy.get("grantControls")):
             continue
 
         pid = policy.get("id") or policy.get("displayName") or "<unnamed>"
