@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* **Scans no longer copy directory data into the logs.** For every user without an admin
+  role, the overprivileged-admin check logged the user's full Graph `/memberOf` response:
+  group names and descriptions, mail and proxy addresses, and security identifiers. It
+  now logs the user ID and how many objects of each type were returned. Logs from earlier
+  versions still contain that data: delete or restrict them if others can read them.
+
 ## 0.1.2 (2026-11-15)
 
 * The API (`GET /` and the OpenAPI page) and the dashboard package now report the release
