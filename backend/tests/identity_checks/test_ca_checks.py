@@ -488,3 +488,30 @@ def test_high_risk_sign_in_block_fail_when_grant_controls_null():
     policy = _all_users_all_apps("p-risk-null", signInRiskLevels=["high"])
     results = asyncio.run(detect_ca_high_risk_sign_in_block(ctx=_ctx([policy])))
     assert results[0]["passed"] is False
+
+
+def test_legacy_auth_pass_when_security_defaults_enabled():
+    # Security defaults block legacy authentication tenant-wide without a CA policy.
+    ctx = TenantGraphContext(
+        tenant_id=TENANT_ID,
+        fetched_at=datetime.now(tz=timezone.utc),
+        conditional_access_policies=[],
+        break_glass_accounts=[],
+        security_defaults_enabled=True,
+    )
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=ctx))
+    assert results[0]["passed"] is True
+    assert results[0]["evidence"]["detection_source"] == "security_defaults"
+    assert results[0]["evidence"]["unblocked_client_app_types"] == []
+
+
+def test_legacy_auth_still_evaluates_policies_when_security_defaults_off():
+    ctx = TenantGraphContext(
+        tenant_id=TENANT_ID,
+        fetched_at=datetime.now(tz=timezone.utc),
+        conditional_access_policies=[],
+        break_glass_accounts=[],
+        security_defaults_enabled=False,
+    )
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=ctx))
+    assert results[0]["passed"] is False

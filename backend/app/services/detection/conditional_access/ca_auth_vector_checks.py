@@ -20,8 +20,27 @@ async def detect_ca_legacy_auth_other_blocked(*, ctx: TenantGraphContext) -> lis
     CA-09: Verify enabled CA policies block BOTH legacy auth client types
     (exchangeActiveSync and other) for all users and all cloud apps. The two
     types may be blocked by different policies. Only an explicit "block" grant
-    counts. Returns a single TENANT-scoped finding.
+    counts. Security defaults block legacy authentication tenant-wide, so a
+    tenant with them enabled passes (as CA_MFA_ALL_USERS does).
+    Returns a single TENANT-scoped finding.
     """
+    if ctx.security_defaults_enabled is True:
+        return [
+            {
+                "control_id": "CA_LEGACY_AUTH_BLOCK",
+                "resource_type": "TENANT",
+                "resource_id": ctx.tenant_id,
+                "passed": True,
+                "severity": "HIGH",
+                "evidence": {
+                    "detection_source": "security_defaults",
+                    "blocking_policy_ids": [],
+                    "unblocked_client_app_types": [],
+                    "total_policies_evaluated": len(ctx.conditional_access_policies or []),
+                },
+            }
+        ]
+
     if ctx.conditional_access_policies is None:
         return []
 
