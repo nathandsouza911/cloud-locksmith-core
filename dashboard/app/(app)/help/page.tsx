@@ -17,6 +17,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ShieldHalf,
   AlertTriangle,
   Activity,
   BarChart3,
@@ -208,6 +209,20 @@ const GROUPS: HelpGroup[] = [
           "Offboard User to start a guided, step-by-step offboarding session (you'll get an extra warning if the account is a Global Administrator).",
           "Rollback Offboarding on a completed offboard.",
         ],
+      },
+      {
+        id: "ca-coverage",
+        title: "CA Coverage",
+        icon: ShieldHalf,
+        path: "/ca-coverage",
+        purpose:
+          "For every user, whether Conditional Access requires MFA, blocks legacy authentication and (for admins) requires admin MFA — and, where not, which policy leaves them out and why (excluded by a group or role, report-only, only some apps, only under conditions).",
+        actions: [
+          "Show only users with gaps, or search by name or UPN.",
+          "Open a row to read the reasons and the covering policies.",
+          "Export CSV for the full per-user table.",
+        ],
+        note: "Read-only. It models policy assignment, not Microsoft's evaluation engine; the page lists what it does not evaluate.",
       },
       {
         id: "remediation-timeline",

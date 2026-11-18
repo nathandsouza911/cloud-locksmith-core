@@ -410,6 +410,30 @@ def update_finding_state(finding, scan_result) -> None:
     )
 
 
+# Evidence keys owned by the remediation workflow, not by the scan. Scans merge into the
+# stored evidence (so an approval in progress survives a rescan), so whatever ends a
+# workflow must remove its keys or they stay on the finding indefinitely.
+APPROVAL_EVIDENCE_KEYS = ("approved_scope_hash", "approved_roles")
+WORKFLOW_EVIDENCE_KEYS = APPROVAL_EVIDENCE_KEYS + (
+    "approval_expired_at",
+    "approval_invalidated_at",
+    "last_execution_error",
+    "error_type",
+    "error_label",
+    "last_execution_failure_type",
+    "report_only_policy_applied",
+    "report_only_verified_at",
+)
+
+
+def clear_evidence_keys(result, keys) -> None:
+    evidence = getattr(result, "evidence", None)
+    if not isinstance(evidence, dict) or not any(key in evidence for key in keys):
+        return
+    # Assign a new dict so SQLAlchemy sees the change on a plain JSON column.
+    result.evidence = {key: value for key, value in evidence.items() if key not in keys}
+
+
 def reconcile_rolled_back_state(result) -> None:
     current = current_remediation_status(result)
     if current == RemediationStatus.IGNORED.value:
@@ -424,3 +448,5 @@ def reconcile_rolled_back_state(result) -> None:
         )
     if hasattr(result, "last_remediated_at"):
         result.last_remediated_at = None
+    # The rolled-back fix's approval, failures and report-only state no longer apply.
+    clear_evidence_keys(result, WORKFLOW_EVIDENCE_KEYS)

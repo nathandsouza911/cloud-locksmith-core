@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.session import AsyncSessionLocal
 from app.services.tenant_service import get_tenant
-from app.services.ca_mfa_evaluator import is_mfa_policy, evaluate_tenant_wide_ca_mfa
-from app.services.ca_user_coverage import users_covered_by_policy
+from app.simulation.coverage import COVERED, REPORT_ONLY, build_coverage
+from app.simulation.tenant_reader import read_tenant_identity
 from app.services.activity.unused_account_detector import evaluate_unused_account
 from app.services.activity.workload_activity_source import fetch_workload_activity
 from app.services.detection.identity_overprivileged_admin import (
@@ -28,10 +28,6 @@ from app.services.detection.illicit_consent_grants_detector import (
 )
 from app.services.detection.oauth_app_consent_discovery_detector import (
     detect_oauth_app_consent,
-)
-from app.services.graph_ca_service import (
-    fetch_conditional_access_policies,
-    build_ca_group_member_map,
 )
 from app.services.graph_client import graph_get, graph_get_all, graph_get_with_token
 from app.services.detection.password_never_expires_detector import evaluate_password_never_expires
@@ -81,7 +77,6 @@ from app.services.finding_cleanup import (
 )
 from app.services.remediation_decision_engine import generate_remediation_decisions
 from app.services.token_manager import get_valid_access_token
-from app.services.ca_policy_states import CA_STATE_REPORT_ONLY
 from app.services.graph.graph_fetcher import GraphFetcher
 from app.services.detection.conditional_access.ca_mfa_checks import (
     detect_ca_mfa_all_users,
@@ -130,68 +125,6 @@ async def _scan_ca_license_available(db, tenant, *, tenant_id: str) -> bool:
     except Exception:
         logger.exception("identity_scan_ca_license_check_failed tenant_id=%s", tenant_id)
         return True
-
-
-def _mfa_policy_state(policy: dict) -> str | None:
-    if not is_mfa_policy(policy):
-        return None
-    state = str(policy.get("state") or "").strip()
-    if state == "enabled":
-        return "enabled"
-    if state == CA_STATE_REPORT_ONLY:
-        return "report_only"
-    return None
-
-
-def _evaluate_mfa_coverage(
-    *,
-    user_id: str,
-    policies: list[dict],
-    all_user_ids: set[str],
-    group_member_map: dict[str, set[str]] | None = None,
-) -> dict:
-    enabled_policy_ids: list[str] = []
-    report_only_policy_ids: list[str] = []
-
-    for policy in policies:
-        policy_state = _mfa_policy_state(policy)
-        if policy_state is None:
-            continue
-        covered_users = users_covered_by_policy(policy, all_user_ids, group_member_map)
-        if user_id not in covered_users:
-            continue
-
-        policy_id = policy.get("id")
-        if not isinstance(policy_id, str) or not policy_id:
-            policy_id = policy.get("displayName") or "<unnamed-policy>"
-
-        if policy_state == "enabled":
-            enabled_policy_ids.append(policy_id)
-        elif policy_state == "report_only":
-            report_only_policy_ids.append(policy_id)
-
-    if enabled_policy_ids:
-        return {
-            "passed": True,
-            "status": "pass",
-            "enabled_policy_ids": enabled_policy_ids,
-            "report_only_policy_ids": report_only_policy_ids,
-        }
-
-    if report_only_policy_ids:
-        return {
-            "passed": False,
-            "status": "partial",
-            "enabled_policy_ids": enabled_policy_ids,
-            "report_only_policy_ids": report_only_policy_ids,
-        }
-
-    return {
-        "passed": False,
-        "status": "fail",
-        "enabled_policy_ids": enabled_policy_ids,
-        "report_only_policy_ids": report_only_policy_ids,
-    }
 
 
 async def _safe_upsert_control_result(db: AsyncSession, **kwargs):
@@ -442,22 +375,14 @@ async def run_user_controls(
     user_map = {u["id"]: u for u in standard_users}
     all_user_ids = set(user_map.keys())
 
-    # ── MFA enforcement — 3-tier hierarchy ───────────────────────────────────
+    # ── MFA enforcement ──────────────────────────────────────────────────────
     #
-    # Tier 1 – Security Defaults (tenant-wide, managed by Microsoft)
-    #   If enabled, every sign-in requires MFA. Skip all CA evaluation.
-    #
-    # Tier 2 – Tenant-wide Conditional Access (MVP scope)
-    #   Any single enabled CA policy whose includeUsers == "All" AND
-    #   grantControls contains "mfa" makes every user protected.
-    #   Skip per-user evaluation.
-    #
-    # Tier 3 – Per-user Conditional Access evaluation
-    #   Fall back to checking whether each individual user is covered by an
-    #   enabled or report-only CA policy.
-    #
-    # Fetch failure: ca_mfa_enforced = None → mark findings UNKNOWN (not FAIL)
-    # to avoid false positives when Graph is temporarily unavailable.
+    # Security defaults on: every user is covered (Microsoft enforces MFA).
+    # Otherwise every user is evaluated with the CA coverage engine, the same one the
+    # CA Coverage page uses: covered only by an enforced policy that includes them, does
+    # not exclude them directly or by group or role, and applies to all applications,
+    # client apps and conditions. The tenant is read fail-closed (nested group members,
+    # role holders): if any read fails, every result is UNKNOWN, never a pass.
 
     if security_defaults_enabled is None:
         security_defaults_enabled = await fetch_security_defaults_enabled(db, tenant)
@@ -467,46 +392,16 @@ async def run_user_controls(
         security_defaults_enabled,
     )
 
-    # ca_mfa_enforced:
-    #   True  – at least one tenant-wide CA policy enforces MFA
-    #   False – policies fetched successfully, none qualify
-    #   None  – Graph call failed; enforcement state is unknown
-    ca_mfa_enforced: bool | None = False
-    ca_mfa_policy_ids: list[str] = []
+    mfa_by_user: dict[str, dict] | None = {}
     mfa_fetch_error: str | None = None
-    policies: list[dict] = []
-
     if security_defaults_enabled is False:
         try:
-            policies = await fetch_conditional_access_policies(db, tenant)
-            ca_mfa_enforced, ca_mfa_policy_ids = evaluate_tenant_wide_ca_mfa(policies)
-            logger.info(
-                "identity_scan_service_ca_mfa tenant_id=%s enforced=%s matching_policies=%s",
-                tenant_id,
-                ca_mfa_enforced,
-                ca_mfa_policy_ids,
-            )
+            coverage = build_coverage(await read_tenant_identity(db, tenant))
+            mfa_by_user = {row["id"]: row["mfa"] for row in coverage["users"]}
         except Exception as exc:
-            logger.exception(
-                "identity_scan_service_mfa_policy_fetch_failed tenant_id=%s",
-                tenant_id,
-            )
+            logger.exception("identity_scan_service_mfa_coverage_read_failed tenant_id=%s", tenant_id)
             mfa_fetch_error = str(exc)
-            ca_mfa_enforced = None  # unknown — do not assume unprotected
-
-    # Pre-fetch CA group memberships for Tier 3 per-user evaluation.
-    # Only needed when policies were fetched successfully AND no tenant-wide
-    # policy was detected (ca_mfa_enforced is False).  Each group is queried
-    # once here; the result is passed into every per-user coverage check to
-    # avoid N+1 Graph calls inside the loop.
-    group_member_map: dict[str, set[str]] = {}
-    if policies and ca_mfa_enforced is False:
-        group_member_map = await build_ca_group_member_map(db, tenant, policies)
-        logger.info(
-            "identity_scan_service_ca_group_map tenant_id=%s groups_resolved=%s",
-            tenant_id,
-            len(group_member_map),
-        )
+            mfa_by_user = None  # unknown: never assume covered
 
     user_mfa_failures = []
     admin_mfa_failures = []
@@ -517,7 +412,7 @@ async def run_user_controls(
         if control_id not in baseline_controls:
             continue
 
-        # Tier 1: Security Defaults — explicitly True; None means unknown
+        coverage_reasons: list[str] = []
         if security_defaults_enabled is True:
             mfa_eval: dict = {
                 "passed": True,
@@ -527,11 +422,8 @@ async def run_user_controls(
                 "ca_policy_detected": False,
             }
             detection_source = "security_defaults"
-
-        # Security Defaults fetch failed — skip CA evaluation entirely;
-        # marking UNKNOWN avoids false positives when Graph is temporarily
-        # unavailable.  Do NOT fall through to CA tier.
-        elif security_defaults_enabled is None:
+        elif security_defaults_enabled is None or mfa_by_user is None or uid not in mfa_by_user:
+            # Security defaults or the tenant could not be read: UNKNOWN, not FAIL or PASS.
             mfa_eval = {
                 "passed": False,
                 "status": "unknown",
@@ -540,43 +432,18 @@ async def run_user_controls(
                 "ca_policy_detected": False,
             }
             detection_source = "unknown"
-
-        # Tier 2: Tenant-wide CA
-        elif ca_mfa_enforced is True:
-            mfa_eval = {
-                "passed": True,
-                "status": "conditional_access",
-                "enabled_policy_ids": ca_mfa_policy_ids,
-                "report_only_policy_ids": [],
-                "ca_policy_detected": True,
-            }
-            detection_source = "conditional_access"
-
-        # Graph fetch failed — enforcement state unknown
-        elif ca_mfa_enforced is None:
-            mfa_eval = {
-                "passed": False,
-                "status": "unknown",
-                "enabled_policy_ids": [],
-                "report_only_policy_ids": [],
-                "ca_policy_detected": False,
-            }
-            detection_source = "unknown"
-
-        # Tier 3: Per-user CA evaluation (includes group-expanded coverage)
         else:
-            mfa_eval = _evaluate_mfa_coverage(
-                user_id=uid,
-                policies=policies,
-                all_user_ids=all_user_ids,
-                group_member_map=group_member_map,
-            )
+            row = mfa_by_user[uid]
+            covered = row["status"] == COVERED
+            coverage_reasons = list(row["reasons"])
             mfa_eval = {
-                **mfa_eval,
-                "ca_policy_detected": len(mfa_eval["enabled_policy_ids"]) > 0,
+                "passed": covered,
+                "status": {COVERED: "pass", REPORT_ONLY: "partial"}.get(row["status"], "fail"),
+                "enabled_policy_ids": list(row["policy_ids"]) if covered else [],
+                "report_only_policy_ids": list(row["policy_ids"]) if row["status"] == REPORT_ONLY else [],
+                "ca_policy_detected": covered,
             }
-            # Source reflects whether per-user CA coverage was found or not.
-            detection_source = "conditional_access" if mfa_eval["passed"] else "per_user"
+            detection_source = "conditional_access" if covered else "per_user"
 
         evidence = {
             "user_id": uid,
@@ -589,6 +456,7 @@ async def run_user_controls(
             "enabled_mfa_policy_ids": mfa_eval["enabled_policy_ids"],
             "report_only_mfa_policy_ids": mfa_eval["report_only_policy_ids"],
             "ca_policy_detected": mfa_eval["ca_policy_detected"],
+            "mfa_coverage_reasons": coverage_reasons,
             "security_defaults_enabled": security_defaults_enabled,
             "conditional_access_fetch_failed": mfa_fetch_error is not None,
         }
@@ -868,12 +736,12 @@ async def run_tenant_controls(
         except Exception:
             logger.exception("app_secret_expiry_detection_failed tenant_id=%s", tenant_id)
     if "IDENTITY_BREAK_GLASS_ACCOUNT" in baseline_controls:
-        control_results.append(
-            await detect_break_glass_accounts(
-                db=db,
-                tenant=tenant,
-            )
-        )
+        try:
+            control_results.append(await detect_break_glass_accounts(db=db, tenant=tenant))
+        except Exception:
+            # The detector reads the tenant fail-closed; no result (never a pass) when it
+            # cannot, and the other tenant controls are still saved.
+            logger.exception("break_glass_detection_failed tenant_id=%s", tenant_id)
     if settings.CLX_INJECT_TEST_TENANT_CONTROL:
         control_results.append(
             {

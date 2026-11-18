@@ -17,7 +17,8 @@ import pytest
 
 from app.schemas.graph_payloads import ConditionalAccessPolicySchema
 from app.services.ca_mfa_evaluator import is_mfa_policy
-from app.services.identity_scan_service import _mfa_policy_state
+from app.simulation.coverage import REPORT_ONLY as COVERAGE_REPORT_ONLY, build_coverage
+from app.simulation.tenant_reader import TenantIdentity
 from app.services.license_check_service import check_conditional_access_license
 from app.services.remediation.mfa_policy import build_mfa_admins_policy, build_mfa_all_users_policy
 
@@ -72,9 +73,16 @@ def test_licence_probe_creates_its_temporary_policy_in_report_only():
 
 
 def test_scan_recognises_a_report_only_mfa_policy_from_graph():
-    policy = {"state": REPORT_ONLY, "grantControls": {"builtInControls": ["mfa"]}}
+    policy = {
+        "id": "p1",
+        "state": REPORT_ONLY,
+        "conditions": {"users": {"includeUsers": ["All"]}, "applications": {"includeApplications": ["All"]}},
+        "grantControls": {"builtInControls": ["mfa"]},
+    }
     assert is_mfa_policy(policy) is True
-    assert _mfa_policy_state(policy) == "report_only"
+    # The identity scan's per-user MFA result comes from the coverage engine.
+    coverage = build_coverage(TenantIdentity(users=[{"id": "u1"}], policies=[policy]))
+    assert coverage["users"][0]["mfa"]["status"] == COVERAGE_REPORT_ONLY
 
 
 def test_no_app_code_uses_the_invalid_state_value():
