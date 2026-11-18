@@ -578,9 +578,12 @@ def test_mfa_all_users_fail_when_policy_covers_only_some_apps():
     del no_apps["conditions"]["applications"]
     assert _run(detect_ca_mfa_all_users, [no_apps]) is False
 
-    all_apps_with_exclusion = _scoped("p", {"includeUsers": ["All"]}, ["mfa"])
-    all_apps_with_exclusion["conditions"]["applications"]["excludeApplications"] = ["some-app-id"]
-    assert _run(detect_ca_mfa_all_users, [all_apps_with_exclusion]) is True
+    all_apps = _scoped("p", {"includeUsers": ["All"]}, ["mfa"])
+    assert _run(detect_ca_mfa_all_users, [all_apps]) is True
+
+    # An excluded app is a gap, as on the CA Coverage page (test_ca_scope_consistency.py).
+    all_apps["conditions"]["applications"]["excludeApplications"] = ["some-app-id"]
+    assert _run(detect_ca_mfa_all_users, [all_apps]) is False
 
 
 def test_mfa_admins_fail_when_policy_covers_only_some_apps():
@@ -595,5 +598,8 @@ def test_mfa_admins_fail_when_policy_covers_only_some_apps():
     assert _run(detect_ca_mfa_admins, [all_users_one_app]) is False
 
     roles_all_apps = _scoped("p", {"includeRoles": sorted(PRIVILEGED_ROLE_IDS)}, ["mfa"])
-    roles_all_apps["conditions"]["applications"]["excludeApplications"] = ["some-app-id"]
     assert _run(detect_ca_mfa_admins, [roles_all_apps]) is True
+
+    # An excluded app is a gap, as on the CA Coverage page (test_ca_scope_consistency.py).
+    roles_all_apps["conditions"]["applications"]["excludeApplications"] = ["some-app-id"]
+    assert _run(detect_ca_mfa_admins, [roles_all_apps]) is False
