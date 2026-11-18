@@ -3,7 +3,8 @@
 Run it through `docker compose run --rm setup` in deploy/. It signs in with a device
 code, creates a single-tenant app registration with the delegated Graph scopes the
 backend asks for, creates a 24-month client secret, generates the local secrets and
-writes deploy/cloud-locksmith.env. It never grants admin consent, never assigns roles,
+writes deploy/cloud-locksmith.env (plus deploy/cloud-locksmith-db.env, which holds only
+the Postgres and Redis passwords for those two services). It never grants admin consent, never assigns roles,
 never prints a secret and never replaces a config that already exists.
 
 `--rotate-secret` adds a new client secret, saves it, then deletes the old one.
@@ -27,6 +28,9 @@ from pathlib import Path
 from microsoft_oauth_scopes import DELEGATED_SCOPES
 
 CONFIG_NAME = "cloud-locksmith.env"
+# Postgres and Redis get only their own passwords, not the whole config.
+DB_CONFIG_NAME = "cloud-locksmith-db.env"
+DB_KEYS = ("POSTGRES_PASSWORD", "REDIS_PASSWORD")
 GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000"
 PERSONAL_ACCOUNT_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad"
 APP_DISPLAY_NAME = "Cloud Locksmith (local)"
@@ -218,6 +222,10 @@ def _give_to_out_dir_owner(path: Path) -> None:
         pass  # not permitted, or a filesystem without ownership
 
 
+def db_env(config: dict[str, str]) -> dict[str, str]:
+    return {key: config[key] for key in DB_KEYS}
+
+
 def write_config(path: Path, config: dict[str, str]) -> None:
     if path.exists():
         raise FileExistsError(f"{path} already exists")
@@ -326,6 +334,38 @@ def _is_forbidden(exc: AzError) -> bool:
     return any(marker in text for marker in ("Insufficient privileges", "Authorization_RequestDenied", "Forbidden"))
 
 
+def _check_db_env(db_path: Path, config: dict[str, str]) -> int | None:
+    """Recreate a missing db env file from the main config; never overwrite one.
+
+    Returns None when the file matches the main config, else an exit code."""
+    expected = db_env(config)
+    if not db_path.exists():
+        write_config(db_path, expected)
+        print(f"{DB_CONFIG_NAME} was missing; it was recreated from {CONFIG_NAME} (no new secret).")
+        return None
+    try:
+        found = parse_env(db_path.read_text(encoding="utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        found = None
+    if found != expected:
+        if found is None:
+            detail = "it cannot be read"
+        else:
+            # Key names only, never values.
+            wrong = [key for key in DB_KEYS if found.get(key) != expected[key]]
+            extra = sorted(set(found) - set(DB_KEYS))
+            detail = ", ".join(
+                [f"{key} differs or is missing" for key in wrong] + [f"unexpected {key}" for key in extra]
+            )
+        _error(
+            f"{DB_CONFIG_NAME} does not match {CONFIG_NAME} ({detail}). Both files were left unchanged.\n"
+            f"If no stack has used it yet, delete {DB_CONFIG_NAME} and run setup again to recreate it\n"
+            f"from {CONFIG_NAME}."
+        )
+        return 2
+    return None
+
+
 def _status(config: dict[str, str]) -> int:
     print(
         "Cloud Locksmith is already set up.\n"
@@ -343,6 +383,7 @@ def _signed_in_tenant(az) -> str:
 
 
 def _create(path: Path, az) -> int:
+    db_path = path.with_name(DB_CONFIG_NAME)
     _sign_in(az)
     try:
         tenant_id = _signed_in_tenant(az)
@@ -399,6 +440,7 @@ def _create(path: Path, az) -> int:
                     _error(f"Creating the app registration failed: {exc}\nNothing was created.")
                 return 1
         app_id = app.get("appId") if isinstance(app, dict) else None
+        wrote_db = False
         try:
             if not app_id:
                 raise AzError("az ad app create returned no appId")
@@ -412,8 +454,13 @@ def _create(path: Path, az) -> int:
                 secret_expires=expires,
                 local=local,
             )
+            # The db file first: a complete main config then implies the db file exists.
+            write_config(db_path, db_env(config))
+            wrote_db = True
             write_config(path, config)
         except (Exception, KeyboardInterrupt) as exc:
+            if wrote_db:
+                db_path.unlink(missing_ok=True)
             _error(f"Setup failed after creating the app registration: {redact(str(exc))}")
             if not app_id:
                 _error(
@@ -519,7 +566,13 @@ def main(argv: list[str] | None = None, *, az=run_az, out_dir: Path = Path("/out
                 return 1
             return _rotate(path, config, az)
         if config is not None:
-            return _status(config)
+            return _check_db_env(path.with_name(DB_CONFIG_NAME), config) or _status(config)
+        if path.with_name(DB_CONFIG_NAME).exists():
+            _error(
+                f"{DB_CONFIG_NAME} exists but {CONFIG_NAME} does not. Setup does not overwrite it.\n"
+                f"Move {DB_CONFIG_NAME} aside if no stack has used it, then run setup again."
+            )
+            return 2
         return _create(path, az)
     except AzError as exc:
         _error(str(exc))

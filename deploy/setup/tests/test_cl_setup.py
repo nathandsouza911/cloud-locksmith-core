@@ -106,9 +106,20 @@ def config_path(out_dir):
     return out_dir / "cloud-locksmith.env"
 
 
+def db_path(out_dir):
+    return out_dir / "cloud-locksmith-db.env"
+
+
+def write_both(out_dir, config):
+    cl_setup.write_config(db_path(out_dir), cl_setup.db_env(config))
+    cl_setup.write_config(config_path(out_dir), config)
+
+
 def assert_nothing_written(out_dir):
     assert not config_path(out_dir).exists()
     assert not (out_dir / "cloud-locksmith.env.tmp").exists()
+    assert not db_path(out_dir).exists()
+    assert not (out_dir / "cloud-locksmith-db.env.tmp").exists()
 
 
 def test_render_parse_round_trip():
@@ -240,16 +251,72 @@ def test_chown_failure_is_ignored(tmp_path, monkeypatch):
 
 def test_existing_complete_config_prints_status_and_makes_no_az_call(tmp_path, capsys):
     config = complete_config()
-    cl_setup.write_config(config_path(tmp_path), config)
+    write_both(tmp_path, config)
     before = config_path(tmp_path).read_bytes()
+    db_before = db_path(tmp_path).read_bytes()
     az = FakeAz()
     assert cl_setup.main([], az=az, out_dir=tmp_path) == 0
     out, err = capsys.readouterr()
     assert az.calls == []
     assert TENANT in out and APP_ID in out and "2027-01-01T00:00:00+00:00" in out
     assert config_path(tmp_path).read_bytes() == before
+    assert db_path(tmp_path).read_bytes() == db_before
     for key in ("MICROSOFT_CLIENT_SECRET", "SESSION_SECRET", "ENCRYPTION_KEY", "POSTGRES_PASSWORD"):
         assert config[key] not in out + err
+
+
+def test_db_env_holds_only_the_two_service_passwords():
+    config = complete_config()
+    assert cl_setup.db_env(config) == {
+        "POSTGRES_PASSWORD": config["POSTGRES_PASSWORD"],
+        "REDIS_PASSWORD": config["REDIS_PASSWORD"],
+    }
+
+
+def test_missing_db_file_is_regenerated_from_the_main_config(tmp_path, capsys):
+    config = complete_config()
+    cl_setup.write_config(config_path(tmp_path), config)
+    before = config_path(tmp_path).read_bytes()
+    az = FakeAz()
+    assert cl_setup.main([], az=az, out_dir=tmp_path) == 0
+    out, err = capsys.readouterr()
+    assert az.calls == []
+    assert config_path(tmp_path).read_bytes() == before
+    assert cl_setup.parse_env(db_path(tmp_path).read_text()) == cl_setup.db_env(config)
+    assert "cloud-locksmith-db.env" in out + err
+    for key in ("POSTGRES_PASSWORD", "REDIS_PASSWORD", "MICROSOFT_CLIENT_SECRET"):
+        assert config[key] not in out + err
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["cloud-locksmith-db.env", "cloud-locksmith.env"]
+
+
+@pytest.mark.parametrize("db_text", ["POSTGRES_PASSWORD=other\nREDIS_PASSWORD=other\n", "not a config line\n", ""])
+def test_db_file_that_disagrees_is_reported_and_left_unchanged(tmp_path, capsys, db_text):
+    config = complete_config()
+    cl_setup.write_config(config_path(tmp_path), config)
+    db_path(tmp_path).write_text(db_text, newline="\n")
+    before = config_path(tmp_path).read_bytes()
+    db_before = db_path(tmp_path).read_bytes()
+    az = FakeAz()
+    assert cl_setup.main([], az=az, out_dir=tmp_path) == 2
+    out, err = capsys.readouterr()
+    assert az.calls == []
+    assert "cloud-locksmith-db.env" in err
+    assert config_path(tmp_path).read_bytes() == before
+    assert db_path(tmp_path).read_bytes() == db_before
+    for key in ("POSTGRES_PASSWORD", "REDIS_PASSWORD"):
+        assert config[key] not in out + err
+
+
+def test_db_file_without_main_config_is_refused_before_sign_in(tmp_path, capsys):
+    db_path(tmp_path).write_text("POSTGRES_PASSWORD=x\nREDIS_PASSWORD=y\n", newline="\n")
+    before = db_path(tmp_path).read_bytes()
+    az = FakeAz()
+    assert cl_setup.main([], az=az, out_dir=tmp_path) == 2
+    _, err = capsys.readouterr()
+    assert az.calls == []
+    assert "cloud-locksmith-db.env" in err
+    assert db_path(tmp_path).read_bytes() == before
+    assert not config_path(tmp_path).exists()
 
 
 @pytest.mark.parametrize("argv", [[], ["--rotate-secret"]])
@@ -282,7 +349,10 @@ def test_create_flow_writes_config_and_never_prints_secrets(tmp_path, capsys):
     assert config["MICROSOFT_CLIENT_SECRET"] == CLIENT_SECRET
     assert config["MICROSOFT_CLIENT_SECRET_KEY_ID"] == "key-1"
     assert config["MICROSOFT_CLIENT_SECRET_EXPIRES"] == "2028-11-18T10:00:00+00:00"
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["cloud-locksmith.env"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["cloud-locksmith-db.env", "cloud-locksmith.env"]
+    assert cl_setup.parse_env(db_path(tmp_path).read_text()) == cl_setup.db_env(config)
+    if os.name == "posix":
+        assert stat.S_IMODE(db_path(tmp_path).stat().st_mode) == 0o600
 
     secret_keys = ("MICROSOFT_CLIENT_SECRET", "SESSION_SECRET", "APP_JWT_SECRET", "REPORT_SIGNING_SECRET")
     secret_keys += ("ENCRYPTION_KEY", "POSTGRES_PASSWORD", "REDIS_PASSWORD")
@@ -308,7 +378,7 @@ def test_create_flow_writes_config_and_never_prints_secrets(tmp_path, capsys):
     assert not az.called("ad", "app", "delete")
 
 
-@pytest.mark.parametrize("failure", ["sp_create", "secret", "credential_list", "write"])
+@pytest.mark.parametrize("failure", ["sp_create", "secret", "credential_list", "write", "main_write"])
 def test_failure_after_app_create_deletes_app_and_writes_nothing(tmp_path, capsys, monkeypatch, failure):
     az = FakeAz()
     if failure == "sp_create":
@@ -317,12 +387,21 @@ def test_failure_after_app_create_deletes_app_and_writes_nothing(tmp_path, capsy
         az.fail("ad", "app", "credential", "reset")
     elif failure == "credential_list":
         az.fail("ad", "app", "credential", "list")
-    else:
+    elif failure == "write":
 
         def broken_write(path, config):
             raise OSError("disk full")
 
         monkeypatch.setattr(cl_setup, "write_config", broken_write)
+    else:
+        real_write = cl_setup.write_config
+
+        def main_write_fails(path, config):
+            if path.name == "cloud-locksmith.env":
+                raise OSError("disk full")
+            real_write(path, config)
+
+        monkeypatch.setattr(cl_setup, "write_config", main_write_fails)
 
     assert cl_setup.main([], az=az, out_dir=tmp_path) == 1
     out, err = capsys.readouterr()

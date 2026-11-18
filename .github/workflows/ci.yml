@@ -138,10 +138,12 @@ jobs:
           import sys; from pathlib import Path
           sys.path[:0] = ['deploy/setup', 'backend/app/services']
           import cl_setup as s
-          s.write_config(Path('deploy/cloud-locksmith.env'), s.build_config(
+          config = s.build_config(
               tenant_id='00000000-0000-4000-8000-000000000001', client_id='00000000-0000-4000-8000-000000000002',
               client_secret='placeholder', secret_key_id='00000000-0000-4000-8000-000000000003',
-              secret_expires='2028-11-18T00:00:00Z', local=s.generate_local_secrets()))
+              secret_expires='2028-11-18T00:00:00Z', local=s.generate_local_secrets())
+          s.write_config(Path('deploy/cloud-locksmith-db.env'), s.db_env(config))
+          s.write_config(Path('deploy/cloud-locksmith.env'), config)
           "
       - name: Start the local-install stack
         run: docker compose -f deploy/compose.yml up --build -d
@@ -151,9 +153,14 @@ jobs:
           # No HTTPS redirect (LOCAL_LOOPBACK_ONLY) and no HSTS header.
           code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/docs)
           test "$code" = "200"
-          if curl -s -D - -o /dev/null http://127.0.0.1:8000/docs | grep -qi '^strict-transport-security'; then
+          headers=$(curl -s -D - -o /dev/null http://127.0.0.1:8000/docs)
+          if grep -qi '^strict-transport-security' <<<"$headers"; then
             echo "HSTS header present"; exit 1
           fi
+          # Production mode, loopback-only, not the demo (prints no secret).
+          mode=$(docker compose -f deploy/compose.yml exec -T api printenv ENVIRONMENT LOCAL_LOOPBACK_ONLY DEMO_MODE | xargs)
+          echo "$mode"
+          test "$mode" = "production true false"
           for i in $(seq 1 30); do curl -fs -o /dev/null http://127.0.0.1:3000/login && break; sleep 2; done
           curl -fs -o /dev/null http://127.0.0.1:3000/login
           ports=$(docker compose -f deploy/compose.yml ps --format '{{.Ports}}')

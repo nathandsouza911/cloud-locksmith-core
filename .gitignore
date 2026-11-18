@@ -30,3 +30,5 @@ Thumbs.db
 # Config written by the setup container (deploy/setup)
 deploy/cloud-locksmith.env
 deploy/cloud-locksmith.env.tmp
+deploy/cloud-locksmith-db.env
+deploy/cloud-locksmith-db.env.tmp

@@ -4,9 +4,10 @@
 #   docker compose run --rm setup     # once: app registration + cloud-locksmith.env
 #   docker compose up -d              # then open http://localhost:3000
 #
-# Setup writes cloud-locksmith.env next to this file (gitignored). Every value the
-# stack needs, including the database and Redis passwords, comes from that file; this
-# file holds no secret. Without it, `docker compose up` refuses to start anything.
+# Setup writes cloud-locksmith.env and cloud-locksmith-db.env (only the Postgres and
+# Redis passwords) next to this file; both are gitignored. Every value the stack needs
+# comes from them; this file holds no secret. Without them, `docker compose up`
+# refuses to start anything.
 #
 # Images are pulled from ghcr.io; if they cannot be pulled, they are built from this
 # checkout. Every port binds 127.0.0.1 only. Stop the demo (docker compose down at
@@ -30,8 +31,9 @@ services:
 
   postgres:
     image: postgres:15
+    # Only POSTGRES_PASSWORD and REDIS_PASSWORD, not the whole config.
     env_file:
-      - path: cloud-locksmith.env
+      - path: cloud-locksmith-db.env
         required: true
     environment:
       POSTGRES_USER: cloudlocksmith
@@ -48,12 +50,13 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Only POSTGRES_PASSWORD and REDIS_PASSWORD, not the whole config.
     env_file:
-      - path: cloud-locksmith.env
+      - path: cloud-locksmith-db.env
         required: true
     command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep PONG"]
       interval: 3s
       timeout: 3s
       retries: 30
