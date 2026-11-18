@@ -35,6 +35,13 @@
   grant controls for policies that set only session controls, and those allow sign-in.
   This affected the device code flow, authentication transfer and high-risk sign-in
   checks as well. Policies created by Apply always send an explicit block and still pass.
+* **The HTTP access log no longer records sign-in secrets.** uvicorn logged every request
+  path with its query string, so each Microsoft sign-in callback wrote its authorization
+  code, `state` and `session_state` to the log, in development and in the production
+  image. Those values, and `id_token`, `access_token`, `refresh_token`, `client_secret`
+  and `code_verifier`, are now replaced with `[REDACTED]`; other parameters are kept.
+  Authorization codes are single-use and short-lived, but logs from earlier versions
+  still contain them: delete or restrict those logs if others can read them.
 
 ## 0.1.2 (2026-11-15)
 
