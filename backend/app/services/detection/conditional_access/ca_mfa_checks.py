@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 from app.services.graph.tenant_graph_context import TenantGraphContext
-from app.services.detection.conditional_access.ca_helpers import is_effective_policy, is_mfa_grant, is_policy_enabled
+from app.services.detection.conditional_access.ca_helpers import (
+    is_effective_policy,
+    is_mfa_grant,
+    is_policy_enabled,
+    targets_all_apps,
+    targets_all_users,
+)
 from app.services.detection.conditional_access.constants import PRIVILEGED_ROLE_IDS
 
 
 async def detect_ca_mfa_all_users(*, ctx: TenantGraphContext) -> list[dict]:
     """
     CA-02: Verify at least one enabled CA policy enforces MFA for all users
-    (includeUsers == ["All"]).
+    on all cloud apps (includeUsers and includeApplications contain "All";
+    exclusions such as break-glass accounts are allowed).
     Returns a single TENANT-scoped finding.
 
     Tier 1 fallback: Entra Security Defaults, when enabled, enforces MFA for
@@ -39,8 +46,7 @@ async def detect_ca_mfa_all_users(*, ctx: TenantGraphContext) -> list[dict]:
     for policy in ctx.conditional_access_policies:
         if not is_policy_enabled(policy) or not is_effective_policy(policy):
             continue
-        include_users = (policy.get("conditions") or {}).get("users", {}).get("includeUsers") or []
-        if "All" not in include_users:
+        if not targets_all_users(policy) or not targets_all_apps(policy):
             continue
         if is_mfa_grant(policy.get("grantControls")):
             pid = policy.get("id") or policy.get("displayName") or "<unnamed>"

@@ -567,3 +567,17 @@ def test_risk_based_step_up_mfa_fail_when_targets_only_some_users():
     risk = {"signInRiskLevels": ["medium", "high"]}
     assert _run(detect_ca_risk_based_step_up_mfa, [_scoped("p", ONE_GROUP, ["mfa"], **risk)]) is False
     assert _run(detect_ca_risk_based_step_up_mfa, [_scoped("p", {"includeUsers": ["All"]}, ["mfa"], **risk)]) is True
+
+
+def test_mfa_all_users_fail_when_policy_covers_only_some_apps():
+    one_app = _scoped("p", {"includeUsers": ["All"]}, ["mfa"])
+    one_app["conditions"]["applications"] = {"includeApplications": ["00000003-0000-0ff1-ce00-000000000000"]}
+    assert _run(detect_ca_mfa_all_users, [one_app]) is False
+
+    no_apps = _scoped("p", {"includeUsers": ["All"]}, ["mfa"])
+    del no_apps["conditions"]["applications"]
+    assert _run(detect_ca_mfa_all_users, [no_apps]) is False
+
+    all_apps_with_exclusion = _scoped("p", {"includeUsers": ["All"]}, ["mfa"])
+    all_apps_with_exclusion["conditions"]["applications"]["excludeApplications"] = ["some-app-id"]
+    assert _run(detect_ca_mfa_all_users, [all_apps_with_exclusion]) is True

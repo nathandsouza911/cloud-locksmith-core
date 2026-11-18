@@ -21,13 +21,9 @@ from app.services.detection.conditional_access.ca_helpers import (
     is_effective_policy,
     is_mfa_grant,
     is_policy_enabled,
+    targets_all_apps,
     targets_all_users,
 )
-
-
-def _targets_all_apps(policy: dict) -> bool:
-    include_apps = (policy.get("conditions") or {}).get("applications", {}).get("includeApplications") or []
-    return "All" in include_apps
 
 
 def _get_risk_levels(policy: dict) -> set[str]:
@@ -48,7 +44,7 @@ async def detect_ca_high_risk_sign_in_block(*, ctx: TenantGraphContext) -> list[
             continue
         if not targets_all_users(policy):  # a policy for some users leaves the rest uncovered
             continue
-        if not _targets_all_apps(policy):
+        if not targets_all_apps(policy):
             continue
         risk_levels = _get_risk_levels(policy)
         if "high" not in risk_levels:
@@ -94,7 +90,7 @@ async def detect_ca_risk_based_step_up_mfa(*, ctx: TenantGraphContext) -> list[d
             continue
         if not targets_all_users(policy):  # a policy for some users leaves the rest uncovered
             continue
-        if not _targets_all_apps(policy):
+        if not targets_all_apps(policy):
             continue
         grant = policy.get("grantControls")
         if not is_mfa_grant(grant):
