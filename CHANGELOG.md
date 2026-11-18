@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+* **Tenant-level Conditional Access checks now use the same rules as CA Coverage, so the
+  two can no longer disagree.** The MFA (all users, admins), legacy authentication, device
+  code flow, authentication transfer, high-risk sign-in and risk-based MFA checks passed
+  on a policy that excluded some apps or applied only under conditions (locations,
+  device platforms, risk levels, a device filter). They now require a policy that applies
+  to every app with none excluded and to every sign-in, except for the condition the
+  check is about (authentication flows for device code and transfer, sign-in risk for
+  the two risk checks). The MFA checks also require all client app types and MFA as a
+  required control, not one option among others. Legacy authentication now accepts a
+  block on client app type `all`, which includes both legacy types. On the CA Coverage
+  page, two policies that each block one legacy type now cover the user, as the check
+  already allowed. User exclusions such as break-glass accounts are still allowed.
+  Policies created by Apply still pass. Tenants that passed before may now fail: that
+  failure is real.
 * **CA Coverage** (new page under Clients, `GET /api/v1/ca-coverage`, CSV export): for
   every user, whether an enforced Conditional Access policy requires MFA on every
   sign-in, blocks legacy authentication (both `exchangeActiveSync` and `other`), and,

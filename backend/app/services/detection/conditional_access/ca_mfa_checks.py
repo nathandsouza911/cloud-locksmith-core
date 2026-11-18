@@ -3,19 +3,22 @@ from __future__ import annotations
 from app.services.graph.tenant_graph_context import TenantGraphContext
 from app.services.detection.conditional_access.ca_helpers import (
     is_effective_policy,
-    is_mfa_grant,
     is_policy_enabled,
-    targets_all_apps,
+    parse_policy,
     targets_all_users,
 )
+from app.simulation.policy_rules import mfa_problems
 from app.services.detection.conditional_access.constants import PRIVILEGED_ROLE_IDS
 
 
 async def detect_ca_mfa_all_users(*, ctx: TenantGraphContext) -> list[dict]:
     """
     CA-02: Verify at least one enabled CA policy enforces MFA for all users
-    on all cloud apps (includeUsers and includeApplications contain "All";
-    exclusions such as break-glass accounts are allowed).
+    on every sign-in: all cloud apps with none excluded, all client app types, no
+    narrowing condition (locations, platforms, risk, device filter), and MFA not
+    offered as one option among other controls. User exclusions such as
+    break-glass accounts are allowed. Same rules as CA Coverage
+    (app.simulation.policy_rules).
     Returns a single TENANT-scoped finding.
 
     Tier 1 fallback: Entra Security Defaults, when enabled, enforces MFA for
@@ -46,9 +49,9 @@ async def detect_ca_mfa_all_users(*, ctx: TenantGraphContext) -> list[dict]:
     for policy in ctx.conditional_access_policies:
         if not is_policy_enabled(policy) or not is_effective_policy(policy):
             continue
-        if not targets_all_users(policy) or not targets_all_apps(policy):
+        if not targets_all_users(policy):
             continue
-        if is_mfa_grant(policy.get("grantControls")):
+        if mfa_problems(parse_policy(policy)) == []:
             pid = policy.get("id") or policy.get("displayName") or "<unnamed>"
             matching_policy_ids.append(str(pid))
 
@@ -71,8 +74,9 @@ async def detect_ca_mfa_all_users(*, ctx: TenantGraphContext) -> list[dict]:
 async def detect_ca_mfa_admins(*, ctx: TenantGraphContext) -> list[dict]:
     """
     CA-03: Verify at least one enabled CA policy covers all 14 privileged role
-    template IDs in includeRoles with an MFA grant on all cloud apps
-    (app exclusions allowed). A policy scoped to some apps covers no roles.
+    template IDs in includeRoles with an MFA grant that applies to every
+    sign-in (same rules as CA_MFA_ALL_USERS). A policy scoped to some apps,
+    client types or conditions covers no roles.
     Returns a single TENANT-scoped finding.
 
     Tier 1 fallback: Entra Security Defaults enforces MFA for every user,
@@ -107,7 +111,7 @@ async def detect_ca_mfa_admins(*, ctx: TenantGraphContext) -> list[dict]:
     for policy in ctx.conditional_access_policies:
         if not is_policy_enabled(policy) or not is_effective_policy(policy):
             continue
-        if not is_mfa_grant(policy.get("grantControls")) or not targets_all_apps(policy):
+        if mfa_problems(parse_policy(policy)) != []:
             continue
         include_roles = (policy.get("conditions") or {}).get("users", {}).get("includeRoles") or []
         for role_id in include_roles:

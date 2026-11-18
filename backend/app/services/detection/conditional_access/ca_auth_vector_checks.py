@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from app.services.graph.tenant_graph_context import TenantGraphContext
 from app.services.detection.conditional_access.ca_helpers import (
-    is_block_grant,
     is_effective_policy,
     is_policy_enabled,
     normalize_transfer_methods,
+    parse_policy,
     targets_all_users,
 )
 from app.services.detection.conditional_access.constants import (
@@ -13,14 +13,18 @@ from app.services.detection.conditional_access.constants import (
     DEVICE_CODE_FLOW_TRANSFER_METHOD,
     LEGACY_AUTH_CLIENT_APP_TYPES,
 )
+from app.simulation.policy_rules import AUTHENTICATION_FLOWS, block_problems, legacy_blocked_types
+
+_FLOWS = frozenset({AUTHENTICATION_FLOWS})
 
 
 async def detect_ca_legacy_auth_other_blocked(*, ctx: TenantGraphContext) -> list[dict]:
     """
     CA-09: Verify enabled CA policies block BOTH legacy auth client types
     (exchangeActiveSync and other) for all users and all cloud apps. The two
-    types may be blocked by different policies. Only an explicit "block" grant
-    counts. Security defaults block legacy authentication tenant-wide, so a
+    types may be blocked by different policies, and a block on client app type
+    "all" blocks both. Only an explicit "block" grant on all cloud apps with none
+    excluded and no narrowing condition counts (same rules as CA Coverage). Security defaults block legacy authentication tenant-wide, so a
     tenant with them enabled passes (as CA_MFA_ALL_USERS does).
     Returns a single TENANT-scoped finding.
     """
@@ -52,16 +56,11 @@ async def detect_ca_legacy_auth_other_blocked(*, ctx: TenantGraphContext) -> lis
         if not targets_all_users(policy):
             continue
 
-        conditions = policy.get("conditions") or {}
-        legacy_types = LEGACY_AUTH_CLIENT_APP_TYPES.intersection(conditions.get("clientAppTypes") or [])
-        if not legacy_types:
+        rule = legacy_blocked_types(parse_policy(policy))
+        if rule is None:
             continue
-
-        include_apps = (conditions.get("applications") or {}).get("includeApplications") or []
-        if "All" not in include_apps:
-            continue
-
-        if not is_block_grant(policy.get("grantControls")):
+        legacy_types, problems = rule
+        if problems:
             continue
 
         pid = policy.get("id") or policy.get("displayName") or "<unnamed>"
@@ -102,20 +101,11 @@ async def detect_ca_device_code_flow_blocked(*, ctx: TenantGraphContext) -> list
             continue
 
         conditions = policy.get("conditions") or {}
-
-        # Must apply to all cloud apps
-        include_apps = (conditions.get("applications") or {}).get("includeApplications") or []
-        if "All" not in include_apps:
-            continue
-
-        # authenticationFlows.transferMethods must include "deviceCodeFlow"
-        auth_flows = conditions.get("authenticationFlows") or {}
-        transfer_methods = normalize_transfer_methods(auth_flows)
+        transfer_methods = normalize_transfer_methods(conditions.get("authenticationFlows") or {})
         if DEVICE_CODE_FLOW_TRANSFER_METHOD not in transfer_methods:
             continue
-
-        # Grant must be a block
-        if not is_block_grant(policy.get("grantControls")):
+        # A block on every app, client type and sign-in; only the flow condition itself is allowed.
+        if block_problems(parse_policy(policy), allowed_conditions=_FLOWS) != []:
             continue
 
         pid = policy.get("id") or policy.get("displayName") or "<unnamed>"
@@ -154,15 +144,10 @@ async def detect_ca_authentication_transfer_blocked(*, ctx: TenantGraphContext) 
             continue
 
         conditions = policy.get("conditions") or {}
-        include_apps = (conditions.get("applications") or {}).get("includeApplications") or []
-        if "All" not in include_apps:
-            continue
-
         transfer_methods = normalize_transfer_methods(conditions.get("authenticationFlows") or {})
         if AUTHENTICATION_TRANSFER_METHOD not in transfer_methods:
             continue
-
-        if not is_block_grant(policy.get("grantControls")):
+        if block_problems(parse_policy(policy), allowed_conditions=_FLOWS) != []:
             continue
 
         pid = policy.get("id") or policy.get("displayName") or "<unnamed>"

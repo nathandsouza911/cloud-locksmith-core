@@ -17,13 +17,15 @@ from __future__ import annotations
 
 from app.services.graph.tenant_graph_context import TenantGraphContext
 from app.services.detection.conditional_access.ca_helpers import (
-    is_block_grant,
     is_effective_policy,
-    is_mfa_grant,
     is_policy_enabled,
-    targets_all_apps,
+    parse_policy,
     targets_all_users,
 )
+from app.simulation.policy_rules import SIGN_IN_RISK, block_problems, mfa_problems
+
+# The risk condition is what these policies are about; any other narrowing condition is not allowed.
+_RISK = frozenset({SIGN_IN_RISK})
 
 
 def _get_risk_levels(policy: dict) -> set[str]:
@@ -44,12 +46,10 @@ async def detect_ca_high_risk_sign_in_block(*, ctx: TenantGraphContext) -> list[
             continue
         if not targets_all_users(policy):  # a policy for some users leaves the rest uncovered
             continue
-        if not targets_all_apps(policy):
-            continue
         risk_levels = _get_risk_levels(policy)
         if "high" not in risk_levels:
             continue
-        if not is_block_grant(policy.get("grantControls")):
+        if block_problems(parse_policy(policy), allowed_conditions=_RISK) != []:
             continue
         pid = policy.get("id") or policy.get("displayName") or "<unnamed>"
         matching_policy_ids.append(str(pid))
@@ -90,10 +90,7 @@ async def detect_ca_risk_based_step_up_mfa(*, ctx: TenantGraphContext) -> list[d
             continue
         if not targets_all_users(policy):  # a policy for some users leaves the rest uncovered
             continue
-        if not targets_all_apps(policy):
-            continue
-        grant = policy.get("grantControls")
-        if not is_mfa_grant(grant):
+        if mfa_problems(parse_policy(policy), allowed_conditions=_RISK) != []:
             continue
         risk_levels = _get_risk_levels(policy)
         newly_covered = risk_levels & {"medium", "high"}

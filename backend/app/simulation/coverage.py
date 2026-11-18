@@ -10,18 +10,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.services.detection.conditional_access.constants import (
-    LEGACY_AUTH_CLIENT_APP_TYPES,
-    PRIVILEGED_ROLE_TEMPLATE_IDS,
-)
+from app.services.detection.conditional_access.constants import PRIVILEGED_ROLE_TEMPLATE_IDS
 from app.simulation.policy_evaluator import match_policy
 from app.simulation.policy_parser import ConditionalAccessPolicy, PolicyParser
+from app.simulation.policy_rules import LEGACY_TYPES, legacy_blocked_types, mfa_problems
 from app.simulation.tenant_reader import TenantIdentity
 
 COVERED, REPORT_ONLY, GAP, NOT_APPLICABLE = "covered", "report_only", "gap", "not_applicable"
 _ENABLED, _REPORT_ONLY_STATE, _DISABLED = "enabled", "enabledforreportingbutnotenforced", "disabled"
 _SECURITY_DEFAULTS = "Security defaults"
-_LEGACY_TYPES = sorted(LEGACY_AUTH_CLIENT_APP_TYPES)  # ["exchangeActiveSync", "other"]
 
 DISCLAIMER = (
     "Models policy assignment; it is not Microsoft's evaluation engine. Conditions other "
@@ -57,10 +54,8 @@ def build_coverage(identity: TenantIdentity) -> dict[str, Any]:
             mfa = legacy = _result(COVERED, [_SECURITY_DEFAULTS], [])
         else:
             matches = [match_policy(user_id, p, group_map, role_map, guest_ids) for p in policies]
-            mfa = _evaluate(policies, matches, names, _mfa_problems, "No policy requires MFA for this user")
-            legacy = _evaluate(
-                policies, matches, names, _legacy_problems, "No policy blocks legacy authentication for this user"
-            )
+            mfa = _evaluate(policies, matches, names, mfa_problems, "No policy requires MFA for this user")
+            legacy = _evaluate_legacy(policies, matches, names)
         is_admin = user_id in admin_ids
         rows.append(
             {
@@ -122,47 +117,44 @@ def _evaluate(policies, matches, names, problems_of, no_policy_reason: str) -> d
     return _result(GAP, [], reasons or [no_policy_reason])
 
 
-def _scope_problems(policy: ConditionalAccessPolicy) -> list[str]:
-    problems = []
-    if "All" not in policy.include_applications or policy.include_user_actions:
-        problems.append("applies only to some applications")
-    if policy.exclude_applications:
-        problems.append("excludes some applications")
-    if policy.narrowing_conditions:
-        problems.append("applies only under conditions: " + ", ".join(policy.narrowing_conditions))
-    return problems
+def _evaluate_legacy(policies, matches, names) -> dict[str, Any]:
+    """Legacy authentication is blocked when the policies covering the user together block
+    both legacy client types (one policy may block each), as the tenant-level check allows."""
+    reasons: list[str] = []
+    enforced: list[tuple[ConditionalAccessPolicy, frozenset[str]]] = []
+    report_only: list[tuple[ConditionalAccessPolicy, frozenset[str]]] = []
+    for policy, match in zip(policies, matches):
+        rule = legacy_blocked_types(policy)
+        if rule is None or not match.included:
+            continue
+        label = names.policy(policy)
+        if match.excluded_by is not None:
+            reasons.append(f"Excluded from {label} {names.exclusion(match.excluded_by)}")
+            continue
+        blocked, problems = rule
+        if problems:
+            reasons.extend(f"{label} {problem}" for problem in problems)
+            continue
+        state = policy.state.lower()
+        if state == _ENABLED:
+            enforced.append((policy, blocked))
+        elif state == _REPORT_ONLY_STATE:
+            report_only.append((policy, blocked))
+        elif state == _DISABLED:
+            reasons.append(f"{label} would cover this user but is turned off")
 
+    def blocked_by(entries) -> frozenset[str]:
+        return frozenset().union(*(blocked for _, blocked in entries))
 
-def _all_client_types(policy: ConditionalAccessPolicy) -> bool:
-    return [t.lower() for t in policy.client_app_types] in ([], ["all"])
-
-
-def _mfa_problems(policy: ConditionalAccessPolicy) -> list[str] | None:
-    controls = {c.lower() for c in policy.grant_controls}
-    if "block" in controls or not ("mfa" in controls or policy.has_authentication_strength):
-        return None
-    problems = _scope_problems(policy)
-    if not _all_client_types(policy):
-        problems.append("applies only to some client apps")
-    if policy.grant_operator != "AND" and controls - {"mfa"}:
-        problems.append("allows another control instead of MFA")
-    return problems
-
-
-def _legacy_problems(policy: ConditionalAccessPolicy) -> list[str] | None:
-    if "block" not in {c.lower() for c in policy.grant_controls}:
-        return None
-    if _all_client_types(policy):
-        blocked = set(_LEGACY_TYPES)
-    else:
-        blocked = set(_LEGACY_TYPES) & set(policy.client_app_types)
-        if not blocked:
-            return None  # blocks only modern clients; not a legacy-auth policy
-    problems = _scope_problems(policy)
-    missing = [t for t in _LEGACY_TYPES if t not in blocked]
-    if missing:
-        problems.append(f"blocks only {', '.join(sorted(blocked))}, not {', '.join(missing)}")
-    return problems
+    if blocked_by(enforced) == LEGACY_TYPES:
+        return _result(COVERED, [names.plain(p) for p, _ in enforced], [], [p.id for p, _ in enforced])
+    partial = [(p, b) for p, b in enforced + report_only if b != LEGACY_TYPES]
+    if report_only and blocked_by(enforced + report_only) == LEGACY_TYPES:
+        return _result(REPORT_ONLY, [names.plain(p) for p, _ in report_only], reasons, [p.id for p, _ in report_only])
+    for policy, blocked in partial:
+        missing = sorted(LEGACY_TYPES - blocked)
+        reasons.append(f"{names.policy(policy)} blocks only {', '.join(sorted(blocked))}, not {', '.join(missing)}")
+    return _result(GAP, [], reasons or ["No policy blocks legacy authentication for this user"])
 
 
 def _result(
