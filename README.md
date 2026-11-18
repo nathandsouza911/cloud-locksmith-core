@@ -65,9 +65,25 @@ Exchange Online configuration or Purview. It is not a replacement for Microsoft'
 tools. Automatic remediation exists but is **off by default** and should stay off until
 you have read `docs/remediation-lifecycle.md`.
 
-## Use it with your own tenant
+## Use it on your own tenant
 
-See `docs/connect-a-real-tenant.md` and `docs/permissions.md`.
+For one Microsoft 365 tenant on one machine (Docker with Compose 2.24 or later; stop the
+demo first, both use ports 3000 and 8000):
+
+```
+cd deploy
+docker compose run --rm setup
+docker compose up -d
+```
+
+`setup` signs you in with a device code, registers a single-tenant app named
+**Cloud Locksmith (local)** and writes the configuration; then open http://localhost:3000.
+Use Chrome, Edge or Firefox. Until the `0.2.0` images are published, `docker compose up -d`
+builds them from source, which takes several minutes. See [`deploy/README.md`](deploy/README.md)
+for requirements, upgrade, secret rotation, backup and uninstall.
+
+To connect several tenants (an MSP) or to register the app yourself, see
+`docs/connect-a-real-tenant.md`. Scopes are in `docs/permissions.md`.
 
 ## Docs
 
