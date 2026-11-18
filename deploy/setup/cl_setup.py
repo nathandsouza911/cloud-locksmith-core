@@ -199,6 +199,23 @@ def _atomic_write(path: Path, text: str) -> None:
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+    _give_to_out_dir_owner(path)
+
+
+def _give_to_out_dir_owner(path: Path) -> None:
+    """Hand the file to the owner of its directory (the bind-mounted deploy/).
+
+    The container runs as root, but docker compose reads env_file as the invoking
+    host user, who could not read a root-owned 0600 file. Mode stays 0600.
+    """
+    chown = getattr(os, "chown", None)
+    if chown is None:
+        return
+    try:
+        owner = os.stat(path.parent)
+        chown(path, owner.st_uid, owner.st_gid)
+    except OSError:
+        pass  # not permitted, or a filesystem without ownership
 
 
 def write_config(path: Path, config: dict[str, str]) -> None:
@@ -335,6 +352,20 @@ def _create(path: Path, az) -> int:
                 "Microsoft 365 tenant you want to scan. Nothing was created."
             )
             return 1
+        existing = [
+            app["appId"]
+            for app in az(["ad", "app", "list", "--display-name", APP_DISPLAY_NAME]) or []
+            if app.get("displayName") == APP_DISPLAY_NAME
+        ]
+        if existing:
+            # `az ad app create` would silently patch an app with this name, and a later
+            # failure would then delete an app registration that is in use.
+            _error(
+                f"An app registration named '{APP_DISPLAY_NAME}' already exists in this tenant "
+                f"(appId {', '.join(existing)}). Delete or rename it in the Entra admin center "
+                "(App registrations), then run setup again. Nothing was created."
+            )
+            return 1
         graph_scopes = az(["ad", "sp", "show", "--id", GRAPH_APP_ID, "--query", "oauth2PermissionScopes"])
         resource_access = required_resource_access(DELEGATED_SCOPES, graph_scopes)
         local = generate_local_secrets()
@@ -367,8 +398,10 @@ def _create(path: Path, az) -> int:
                 else:
                     _error(f"Creating the app registration failed: {exc}\nNothing was created.")
                 return 1
-        app_id = app["appId"]
+        app_id = app.get("appId") if isinstance(app, dict) else None
         try:
+            if not app_id:
+                raise AzError("az ad app create returned no appId")
             az(["ad", "sp", "create", "--id", app_id])
             client_secret, key_id, expires = _new_secret(az, app_id)
             config = build_config(
@@ -382,6 +415,12 @@ def _create(path: Path, az) -> int:
             write_config(path, config)
         except (Exception, KeyboardInterrupt) as exc:
             _error(f"Setup failed after creating the app registration: {redact(str(exc))}")
+            if not app_id:
+                _error(
+                    f"Delete '{APP_DISPLAY_NAME}' in the Entra admin center (App registrations), "
+                    "then run setup again. No config was written."
+                )
+                return 1
             try:
                 az(["ad", "app", "delete", "--id", app_id])
                 _error(f"The app registration {app_id} was deleted and no config was written; run setup again.")

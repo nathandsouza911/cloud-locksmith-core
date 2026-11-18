@@ -40,6 +40,8 @@ class FakeAz:
         self.secret = secret
         self.failures = {}
         self.resource_access_file = None
+        self.existing_apps = []
+        self.create_result = {"appId": APP_ID, "id": "object-id"}
 
     def fail(self, *prefix, stderr="ERROR: boom"):
         self.failures[prefix] = cl_setup.AzError(stderr)
@@ -56,10 +58,14 @@ class FakeAz:
             return {"tenantId": self.tenant, "user": {"name": "admin@example.com"}}
         if cmd[:3] == ("ad", "sp", "show"):
             return GRAPH_SCOPES
+        if cmd[:3] == ("ad", "app", "list"):
+            name = args[args.index("--display-name") + 1]
+            # Like az: a startswith() filter on the display name.
+            return [dict(app) for app in self.existing_apps if app["displayName"].startswith(name)]
         if cmd[:3] == ("ad", "app", "create"):
             path = args[args.index("--required-resource-accesses") + 1]
             self.resource_access_file = json.loads(Path(path.lstrip("@")).read_text())
-            return {"appId": APP_ID, "id": "object-id"}
+            return self.create_result
         if cmd[:3] == ("ad", "sp", "create"):
             return {"appId": APP_ID}
         if cmd == ("ad", "app", "credential", "list"):
@@ -207,6 +213,31 @@ def test_write_config_writes_private_lf_file(tmp_path):
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
+def test_write_and_replace_give_the_file_to_the_out_dir_owner(tmp_path, monkeypatch):
+    owner = os.stat(tmp_path)
+    chowns = []
+    monkeypatch.setattr(cl_setup.os, "chown", lambda p, uid, gid: chowns.append((Path(p), uid, gid)), raising=False)
+    path = config_path(tmp_path)
+    cl_setup.write_config(path, complete_config())
+    cl_setup.replace_secret(path, client_secret="n", secret_key_id="k", secret_expires="e")
+    assert chowns == [(path, owner.st_uid, owner.st_gid)] * 2
+
+
+def test_chown_failure_is_ignored(tmp_path, monkeypatch):
+    calls = []
+
+    def refuse(p, uid, gid):
+        calls.append(p)
+        raise PermissionError("not permitted")
+
+    monkeypatch.setattr(cl_setup.os, "chown", refuse, raising=False)
+    path = config_path(tmp_path)
+    cl_setup.write_config(path, complete_config())
+    cl_setup.replace_secret(path, client_secret="n", secret_key_id="k", secret_expires="e")
+    assert len(calls) == 2
+    assert cl_setup.parse_env(path.read_text())["MICROSOFT_CLIENT_SECRET"] == "n"
+
+
 def test_existing_complete_config_prints_status_and_makes_no_az_call(tmp_path, capsys):
     config = complete_config()
     cl_setup.write_config(config_path(tmp_path), config)
@@ -336,6 +367,43 @@ def test_app_create_forbidden_gives_clear_message(tmp_path, capsys):
     assert "Nothing was created" in err
     assert not az.called("ad", "app", "delete")
     assert not az.called("ad", "app", "credential")
+    assert az.called("logout")
+    assert_nothing_written(tmp_path)
+
+
+def test_existing_app_with_same_name_is_refused(tmp_path, capsys):
+    az = FakeAz()
+    az.existing_apps = [
+        {"appId": "in-use-app-id", "displayName": "Cloud Locksmith (local)"},
+        {"appId": "other-app-id", "displayName": "Cloud Locksmith (local) old"},
+    ]
+    assert cl_setup.main([], az=az, out_dir=tmp_path) == 1
+    out, err = capsys.readouterr()
+    assert "in-use-app-id" in err and "other-app-id" not in err
+    assert "Nothing was created" in err
+    lookup = next(args for args, _ in az.calls if args[:3] == ["ad", "app", "list"])
+    assert lookup[lookup.index("--display-name") + 1] == "Cloud Locksmith (local)"
+    assert not az.called("ad", "app", "create")
+    assert not az.called("ad", "app", "delete")
+    assert not az.called("ad", "app", "credential")
+    assert az.called("logout")
+    assert_nothing_written(tmp_path)
+
+
+def test_app_with_only_a_longer_name_does_not_block_create(tmp_path):
+    az = FakeAz()
+    az.existing_apps = [{"appId": "other-app-id", "displayName": "Cloud Locksmith (local) old"}]
+    assert cl_setup.main([], az=az, out_dir=tmp_path) == 0
+    assert az.called("ad", "app", "create")
+
+
+def test_malformed_create_result_is_reported_and_writes_nothing(tmp_path, capsys):
+    az = FakeAz()
+    az.create_result = {"id": "object-id"}
+    assert cl_setup.main([], az=az, out_dir=tmp_path) == 1
+    err = capsys.readouterr().err
+    assert "Cloud Locksmith (local)" in err and "Entra admin center" in err
+    assert not az.called("ad", "sp", "create")
     assert az.called("logout")
     assert_nothing_written(tmp_path)
 
