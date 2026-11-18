@@ -636,7 +636,8 @@ def start_microsoft_oauth(
     normalized_tenant_id = _normalize_tenant_hint(tenant_id)
     single_tenant_id = settings.single_tenant_id
     if single_tenant_id and normalized_tenant_id and normalized_tenant_id.lower() != single_tenant_id:
-        # Refused before any OAuth state is written.
+        # Refused before any OAuth state is written. %r: the hint is client input.
+        logger.warning("microsoft_oauth_tenant_not_allowed intent=%s tid=%r", intent, normalized_tenant_id)
         raise HTTPException(
             status_code=400,
             detail={
@@ -823,7 +824,7 @@ async def _microsoft_oauth_callback_impl(
     if single_tenant_id and str(azure_tenant_id).strip().lower() != single_tenant_id:
         # The token's tid is the source of truth: refuse a foreign tenant before
         # any id_token verification, Graph call or Tenant/TenantOAuth write.
-        logger.warning("microsoft_oauth_tenant_not_allowed")
+        logger.warning("microsoft_oauth_tenant_not_allowed intent=%s tid=%r", intent, azure_tenant_id)
         raise _CallbackDenied(
             status_code=403,
             connect_error_code="tenant_not_allowed",
@@ -1308,6 +1309,17 @@ async def confirm_msp_connect(
     stored_token = _pending_msp_stored_token(pending)
 
     tenant_id = str(tenant_payload["tenant_id"])
+    single_tenant_id = settings.single_tenant_id
+    if single_tenant_id and tenant_id.strip().lower() != single_tenant_id:
+        # A session staged before single-tenant mode was switched on must not attach.
+        logger.warning("microsoft_oauth_tenant_not_allowed intent=%s tid=%r", pending.intent, tenant_id)
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "TENANT_NOT_ALLOWED",
+                "message": "This install only signs in to its configured Microsoft tenant.",
+            },
+        )
     tenant = get_or_create_tenant(
         db=db,
         tenant_id=tenant_id,

@@ -10,6 +10,7 @@ const MESSAGES: Record<string, string> = {
   tenant_already_owned:
     "This Microsoft tenant is already connected by another account. Ask that account's owner to give you access.",
   cancelled: "Sign-in was cancelled.",
+  tenant_not_allowed: "This Cloud Locksmith install only accepts sign-ins from its own Microsoft tenant.",
 };
 
 const GENERIC_MESSAGE = "Sign-in could not be completed. Please try again.";

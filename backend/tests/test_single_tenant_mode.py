@@ -207,3 +207,68 @@ def test_multi_tenant_config_unchanged(monkeypatch):
         "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
     )
     session.close()
+
+
+def test_confirm_msp_connect_refuses_pending_session_for_other_tenant(monkeypatch):
+    # A pending msp_connect session staged for another tenant before single-tenant
+    # mode was switched on must not be attachable afterwards.
+    session = _make_session()
+    platform_user, _msp_org, _smb_org = _seed_msp_user(session)
+    token = _app_token_for(platform_user)
+    state = _start_msp_connect(session, platform_user, token, tenant_id=OTHER_TENANT)
+    _stub_oauth(monkeypatch, oauth_user_oid="oauth-user-1", is_admin=True, tenant_id=OTHER_TENANT)
+    asyncio.run(
+        auth_microsoft.microsoft_oauth_callback(
+            request=_make_request(token, path="/api/v1/auth/microsoft/callback"),
+            code="code",
+            state=state,
+            error=None,
+            error_description=None,
+            db=session,
+        )
+    )
+    pending = session.query(PendingOAuthSession).filter_by(state=state).one()
+    assert pending.resolved_tenant_id == OTHER_TENANT
+
+    monkeypatch.setattr(settings, "MICROSOFT_TENANT", CONFIGURED_TENANT)
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            auth_microsoft.confirm_msp_connect(
+                payload=auth_microsoft.MspConnectConfirmRequest(session_id=str(pending.id)),
+                request=_make_request(token, path="/api/v1/auth/microsoft/msp-connect/confirm"),
+                db=session,
+            )
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "TENANT_NOT_ALLOWED"
+    assert session.query(Tenant).count() == 0
+    assert session.query(TenantOAuth).count() == 0
+    assert session.get(PendingOAuthSession, pending.id).confirmed_at is None
+    session.close()
+
+
+def test_tenant_refusals_log_intent_and_tenant(monkeypatch, single_tenant, caplog):
+    session = _make_session()
+    with caplog.at_level("WARNING", logger=auth_microsoft.logger.name):
+        with pytest.raises(HTTPException):
+            _start(session, intent="preview", tenant_id=OTHER_TENANT)
+    assert f"microsoft_oauth_tenant_not_allowed intent=preview tid={OTHER_TENANT!r}" in caplog.text
+
+    caplog.clear()
+    state = _state_of(_start(session))
+    _stub_oauth(monkeypatch, oauth_user_oid="oauth-user-1", is_admin=True, tenant_id=OTHER_TENANT)
+    with caplog.at_level("WARNING", logger=auth_microsoft.logger.name):
+        asyncio.run(
+            auth_microsoft.microsoft_oauth_callback(
+                request=_make_request(path="/api/v1/auth/microsoft/callback"),
+                code="code",
+                state=state,
+                error=None,
+                error_description=None,
+                db=session,
+            )
+        )
+    assert f"microsoft_oauth_tenant_not_allowed intent=smb_onboarding tid={OTHER_TENANT!r}" in caplog.text
+    assert "fake-access-token" not in caplog.text
+    session.close()
