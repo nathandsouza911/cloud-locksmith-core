@@ -57,6 +57,18 @@ jobs:
           REQUIRE_PDF_RENDER: "1"
         run: pytest -q
 
+  setup-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pytest cryptography ruff==0.6.9
+      - name: Lint
+        run: ruff check deploy/setup && ruff format --check deploy/setup
+      - run: pytest -q deploy/setup/tests
+
   dashboard:
     runs-on: ubuntu-latest
     defaults:

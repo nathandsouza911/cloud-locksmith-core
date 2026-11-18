@@ -1,0 +1,2 @@
+# Same lint and format settings as the backend.
+extend = "../../backend/pyproject.toml"

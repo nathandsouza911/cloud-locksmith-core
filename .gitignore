@@ -26,3 +26,7 @@ npm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
+
+# Config written by the setup container (deploy/setup)
+deploy/cloud-locksmith.env
+deploy/cloud-locksmith.env.tmp

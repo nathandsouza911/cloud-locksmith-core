@@ -1,0 +1,5 @@
+# The build context is the repository root: send only the two files the image copies,
+# so no .env file or other local state ever reaches the builder.
+*
+!backend/app/services/microsoft_oauth_scopes.py
+!deploy/setup/cl_setup.py
