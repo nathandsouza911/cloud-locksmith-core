@@ -47,6 +47,14 @@
   group names and descriptions, mail and proxy addresses, and security identifiers. It
   now logs the user ID and how many objects of each type were returned. Logs from earlier
   versions still contain that data: delete or restrict them if others can read them.
+* **A rolled-back fix no longer leaves its state on the finding.** Scans merge new
+  evidence into the stored evidence so that an approval in progress survives a rescan,
+  but rollback and approval expiry did not remove the fix's own fields. After a
+  rollback the finding kept "report-only policy applied", the last failure label
+  ("Execution failed") and the approved scope indefinitely. Rollback now removes the
+  approval, failure and report-only fields; approval expiry removes the approved scope
+  (and still records when it expired). Findings rolled back before this release keep
+  the old fields until their next fix or rollback.
 
 ## 0.1.2 (2026-11-15)
 
