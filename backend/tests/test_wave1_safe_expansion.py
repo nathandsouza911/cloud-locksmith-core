@@ -161,6 +161,37 @@ class TestAppSecretExpiryDetector:
             "keyCredentials": [],
         }
 
+    def test_own_app_secret_gets_rotate_hint(self, monkeypatch):
+        from app.config import settings
+        from app.services.detection.app_secret_expiry_detector import evaluate_app_secret_expiry
+
+        app = self._app("own", days_until_expiry=10)
+        monkeypatch.setattr(settings, "MICROSOFT_CLIENT_ID", app["appId"].upper())
+        evidence = evaluate_app_secret_expiry(app)["evidence"]
+        assert evidence["is_this_instance"] is True
+        assert evidence["remediation_hint"] == (
+            "This is Cloud Locksmith's own app registration. "
+            "In deploy/, run: docker compose run --rm setup --rotate-secret"
+        )
+
+    def test_other_app_has_no_rotate_hint(self, monkeypatch):
+        from app.config import settings
+        from app.services.detection.app_secret_expiry_detector import evaluate_app_secret_expiry
+
+        monkeypatch.setattr(settings, "MICROSOFT_CLIENT_ID", "some-other-client")
+        evidence = evaluate_app_secret_expiry(self._app("other", days_until_expiry=10))["evidence"]
+        assert evidence["is_this_instance"] is False
+        assert "remediation_hint" not in evidence
+
+    def test_unset_instance_client_id_never_matches(self, monkeypatch):
+        from app.config import settings
+        from app.services.detection.app_secret_expiry_detector import evaluate_app_secret_expiry
+
+        monkeypatch.setattr(settings, "MICROSOFT_CLIENT_ID", "")
+        app = self._app("blank", days_until_expiry=10)
+        app["appId"] = ""
+        assert evaluate_app_secret_expiry(app)["evidence"]["is_this_instance"] is False
+
     def test_expiring_within_threshold_fails(self):
         from app.services.detection.app_secret_expiry_detector import evaluate_app_secret_expiry
 

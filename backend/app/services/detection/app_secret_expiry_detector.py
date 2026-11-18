@@ -23,8 +23,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from app.config import settings
+
 
 _DEFAULT_EXPIRY_THRESHOLD_DAYS = 90
+
+_OWN_SECRET_REMEDIATION_HINT = "This is Cloud Locksmith's own app registration. In deploy/, run: docker compose run --rm setup --rotate-secret"
 
 _TIER_CRITICAL_DAYS = 0  # already expired
 _TIER_HIGH_DAYS = 7
@@ -126,23 +130,26 @@ def evaluate_app_secret_expiry(
     for c in expiring:
         severity_counts[c["severity"]] += 1
 
-    return {
-        "passed": False,
-        "severity": worst_severity,
-        "resource_id": app_id,
-        "evidence": {
-            "app_id": app_id,
-            "app_display_name": app_display_name,
-            "client_id": client_id,
-            "expiring_credentials": expiring,
-            "expiring_count": len(expiring),
-            "already_expired_count": already_expired_count,
-            "min_days_remaining": min_days,
-            "worst_severity": worst_severity,
-            "severity_counts": severity_counts,
-            "threshold_days": threshold_days,
-        },
+    own_client_id = (settings.MICROSOFT_CLIENT_ID or "").strip().lower()
+    is_this_instance = bool(own_client_id) and (client_id or "").strip().lower() == own_client_id
+
+    evidence = {
+        "app_id": app_id,
+        "app_display_name": app_display_name,
+        "client_id": client_id,
+        "expiring_credentials": expiring,
+        "expiring_count": len(expiring),
+        "already_expired_count": already_expired_count,
+        "min_days_remaining": min_days,
+        "worst_severity": worst_severity,
+        "severity_counts": severity_counts,
+        "threshold_days": threshold_days,
+        "is_this_instance": is_this_instance,
     }
+    if is_this_instance:
+        evidence["remediation_hint"] = _OWN_SECRET_REMEDIATION_HINT
+
+    return {"passed": False, "severity": worst_severity, "resource_id": app_id, "evidence": evidence}
 
 
 def evaluate_all_app_secret_expiry(
