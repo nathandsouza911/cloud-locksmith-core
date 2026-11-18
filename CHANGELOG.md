@@ -24,6 +24,17 @@
   on, every user already counts as required to use MFA) and `security_defaults_enabled`,
   with a warning that Conditional Access policies are not enforced while security
   defaults stay on.
+* **Legacy authentication check (`CA_LEGACY_AUTH_BLOCK`) no longer passes falsely.** It
+  passed when only one of the two legacy client types (Exchange ActiveSync, other clients)
+  was blocked, when the blocking policy targeted only some users, and when a policy had no
+  grant controls. Now both types must be blocked for all users and all cloud apps (by one
+  policy or two); break-glass exclusions are allowed. The finding lists any type still
+  unblocked. A tenant with security defaults enabled passes, since security defaults
+  block legacy authentication (as the MFA checks already allowed). Tenants that passed before may now fail: that failure is real.
+* **A policy with no grant controls is no longer counted as a block.** Graph returns no
+  grant controls for policies that set only session controls, and those allow sign-in.
+  This affected the device code flow, authentication transfer and high-risk sign-in
+  checks as well. Policies created by Apply always send an explicit block and still pass.
 
 ## 0.1.2 (2026-11-15)
 

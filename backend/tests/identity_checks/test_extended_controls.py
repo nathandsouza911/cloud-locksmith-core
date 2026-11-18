@@ -59,7 +59,7 @@ def _full_policy_set() -> list[dict]:
                 "applications": {"includeApplications": ["All"]},
                 "authenticationFlows": {"transferMethods": ["deviceCodeFlow"]},
             },
-            "grantControls": None,
+            "grantControls": {"operator": "OR", "builtInControls": ["block"]},
         },
         {
             "id": "policy-block-auth-transfer",
