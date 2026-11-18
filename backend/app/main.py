@@ -166,7 +166,7 @@ _CSRF_ALLOWED_ORIGINS = set(CORS_ALLOW_ORIGINS)
 
 @app.middleware("http")
 async def https_redirect_and_hsts(request: Request, call_next):
-    if settings.ENVIRONMENT.lower() == "production":
+    if settings.enforce_https:
         # ProxyHeadersMiddleware only updates request.url.scheme when the
         # upstream proxy IP is in TRUSTED_PROXY_HOSTS. On Railway the proxy IP
         # is dynamic, so fall back to X-Forwarded-Proto directly. This is safe
@@ -178,7 +178,7 @@ async def https_redirect_and_hsts(request: Request, call_next):
             https_url = str(request.url).replace("http://", "https://", 1)
             return Response(status_code=301, headers={"Location": https_url})
     response = await call_next(request)
-    if settings.ENVIRONMENT.lower() == "production":
+    if settings.enforce_https:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
