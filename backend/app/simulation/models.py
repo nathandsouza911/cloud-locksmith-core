@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SimulationImpact(BaseModel):
@@ -22,9 +21,11 @@ class SimulationConflict(BaseModel):
 
 
 class SimulationRunRequest(BaseModel):
-    tenant_snapshot: dict[str, Any]
-    proposed_change: dict[str, Any]
-    role_mapping: dict[str, list[str]]
+    """Only the control is chosen by the client; identity data is read server-side."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    control_id: str
 
 
 class SimulationRunResponse(BaseModel):
@@ -35,5 +36,8 @@ class SimulationRunResponse(BaseModel):
     unaffected_users: int
     impacted_users: int
     impacted_admins: int
+    newly_affected_users: int = 0
+    # Conditional Access policies are not enforced while security defaults are on.
+    security_defaults_enabled: bool = False
     conflicts: list[SimulationConflict] = Field(default_factory=list)
     impact: SimulationImpact

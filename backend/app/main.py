@@ -9,6 +9,7 @@ from app.config import settings
 from app.api.v1.remediation_verification import router as remediation_verification_router
 from app.middleware.tenant_context import TenantContextMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.core.log_redaction import install_access_log_redaction
 from app.core.redis_client import verify_redis_available_in_production
 from app.services.auth.jwt_service import decode_access_token
 from app.services.graph_client import TenantNotConnectedError, verify_graph_remediation_permissions_startup
@@ -21,6 +22,7 @@ from app.demo.guards import DemoModeMiddleware, install_outbound_block, validate
 
 
 logger_startup = logging.getLogger("app.startup")
+install_access_log_redaction()  # before any request is logged; see app/core/log_redaction.py
 
 # Demo mode refuses to start next to real credentials or production settings, and
 # blocks all outbound HTTP before any route can run.
@@ -357,6 +359,10 @@ app.include_router(user_offboarding_router, prefix="/api/v1")
 from app.api.v1.simulations import router as simulations_router
 
 app.include_router(simulations_router, prefix="/api/v1")
+
+from app.api.v1.ca_coverage import router as ca_coverage_router
+
+app.include_router(ca_coverage_router, prefix="/api/v1")
 
 from app.api.v1.support import router as support_router
 

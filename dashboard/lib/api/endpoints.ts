@@ -506,6 +506,10 @@ export type SimulationRunResponse = {
   unaffected_users: number;
   impacted_users: number;
   impacted_admins: number;
+  /** Users whose outcome the fix changes, compared to the tenant as it is. */
+  newly_affected_users: number;
+  /** Conditional Access policies are not enforced while security defaults are on. */
+  security_defaults_enabled?: boolean;
   conflicts: Array<{
     type: string;
     policy_ids?: Array<string | null>;
@@ -522,11 +526,54 @@ export type SimulationRunResponse = {
   };
 };
 
-export const runSimulation = (payload: {
-  tenant_snapshot: Record<string, unknown>;
-  proposed_change: Record<string, unknown>;
-  role_mapping: Record<string, string[]>;
-}) => api.post<SimulationRunResponse>("/api/v1/simulations/run", payload);
+export type SimulationControlId = "CA_MFA_ALL_USERS" | "CA_MFA_ADMINS";
+
+/** Simulate Fix. Only the control is sent: the server reads the session tenant's users,
+ * groups, roles and existing policies and builds the policy Apply would send. */
+export const runSimulation = (payload: { control_id: SimulationControlId }) =>
+  api.post<SimulationRunResponse>("/api/v1/simulations/run", payload);
+
+// ─── Conditional Access coverage (ROADMAP 3.1) ───────────────────────────────
+
+export type CoverageStatus = "covered" | "report_only" | "gap" | "not_applicable";
+
+export type CoverageResult = {
+  status: CoverageStatus;
+  policies: string[];
+  reasons: string[];
+};
+
+export type CoverageUser = {
+  id: string;
+  display_name: string | null;
+  user_principal_name: string | null;
+  enabled: boolean;
+  is_guest: boolean;
+  is_admin: boolean;
+  mfa: CoverageResult;
+  legacy_auth: CoverageResult;
+  admin_mfa: CoverageResult;
+};
+
+export type CoverageCounts = Partial<Record<CoverageStatus, number>>;
+
+export type CaCoverageReport = {
+  generated_at: string;
+  security_defaults_enabled: boolean;
+  disclaimer: string;
+  limits: string[];
+  summary: {
+    users: number;
+    mfa: CoverageCounts;
+    legacy_auth: CoverageCounts;
+    admin_mfa: CoverageCounts;
+  };
+  users: CoverageUser[];
+};
+
+export const getCaCoverage = () => api.get<CaCoverageReport>("/api/v1/ca-coverage");
+
+export const getCaCoverageCsv = () => api.get<string>("/api/v1/ca-coverage?format=csv");
 
 // ─── Work queue (Sprint 1) ───────────────────────────────────────────────────
 // Read-only. The tenant is resolved server-side from the session; the
