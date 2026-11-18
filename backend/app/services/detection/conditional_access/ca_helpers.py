@@ -29,6 +29,12 @@ def targets_all_users(policy: dict) -> bool:
     return "All" in (users.get("includeUsers") or [])
 
 
+def targets_all_apps(policy: dict) -> bool:
+    """Returns True if the policy includes all cloud apps (app exclusions allowed)."""
+    apps = (policy.get("conditions") or {}).get("applications") or {}
+    return "All" in (apps.get("includeApplications") or [])
+
+
 def is_policy_enabled(policy: dict) -> bool:
     return policy.get("state") == "enabled"
 
