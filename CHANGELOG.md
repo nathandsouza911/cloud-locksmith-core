@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+* **CA Coverage** (new page under Clients, `GET /api/v1/ca-coverage`, CSV export): for
+  every user, whether an enforced Conditional Access policy requires MFA on every
+  sign-in, blocks legacy authentication (both `exchangeActiveSync` and `other`), and,
+  for privileged-role holders, requires admin MFA. Each gap names the policy and the
+  reason: excluded directly, by group or by role, as a guest; report-only; turned off;
+  only some applications; only under conditions (locations, platforms, risk, device
+  filter); another control allowed instead of MFA. It reads policies, users, transitive
+  group members and role holders with the existing `Policy.Read.All` and
+  `Directory.Read.All` permissions, stops with an error on any failed read rather than
+  report from partial data, and lists what it does not evaluate. The demo shows it on
+  recorded fictional policies.
+* Fixed: a Conditional Access policy that includes no users, groups or roles was treated
+  as covering everyone; in Microsoft Graph it covers no one.
+* **Simulate Fix** is now computed on the server for the signed-in tenant. It took the
+  tenant's users and roles from the browser, without the tenant's existing policies or
+  group members, with roles matched by name rather than role template ID, and with a
+  proposed policy that differed from the one Apply sends. The request is now
+  `{"control_id": ...}` only (other fields are refused); the result adds
+  `newly_affected_users` (users whose access the fix makes stricter; with security defaults
+  on, every user already counts as required to use MFA) and `security_defaults_enabled`,
+  with a warning that Conditional Access policies are not enforced while security
+  defaults stay on.
+
 ## 0.1.2 (2026-11-15)
 
 * The API (`GET /` and the OpenAPI page) and the dashboard package now report the release
