@@ -56,6 +56,19 @@
   (and still records when it expired). Findings rolled back before this release keep
   the old fields until their next fix or rollback.
 
+* **Per-user MFA findings no longer report uncovered users as covered.** "User without
+  MFA" and "Admin without MFA" passed every user as soon as any enabled MFA policy
+  included all users, even users that policy excluded (directly, by group or by role) and
+  policies limited to some apps or conditions. Without such a policy, group and role
+  exclusions were ignored, nested groups were not read, and a group that could not be
+  read was treated as empty. Both findings now use the CA Coverage engine, so the scan
+  and the page give the same answer, and each finding lists the reasons (for example
+  "Excluded from 'MFA all' by group 'CA exclusions'"). If any read fails, the result is
+  Unknown, never a pass. The break-glass check uses the same matcher, so an account
+  excluded by group or role is no longer reported as covered by MFA, and a failed read
+  records no break-glass result instead of stopping the tenant scan. Expect new failures
+  on tenants with exclusions or app-limited policies: they are real.
+
 ## 0.1.2 (2026-11-15)
 
 * The API (`GET /` and the OpenAPI page) and the dashboard package now report the release
