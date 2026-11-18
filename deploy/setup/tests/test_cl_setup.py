@@ -42,6 +42,20 @@ class FakeAz:
         self.resource_access_file = None
         self.existing_apps = []
         self.create_result = {"appId": APP_ID, "id": "object-id"}
+        self.organization = {
+            "value": [
+                {
+                    "id": tenant,
+                    "displayName": "Contoso Ltd",
+                    "verifiedDomains": [
+                        {"name": "contoso.onmicrosoft.com", "isDefault": False},
+                        {"name": "contoso.com", "isDefault": True},
+                    ],
+                    "technicalNotificationMails": ["it@contoso.com"],
+                    "street": "1 Secret Street",
+                }
+            ]
+        }
 
     def fail(self, *prefix, stderr="ERROR: boom"):
         self.failures[prefix] = cl_setup.AzError(stderr)
@@ -56,6 +70,10 @@ class FakeAz:
             return None
         if cmd[:2] == ("account", "show"):
             return {"tenantId": self.tenant, "user": {"name": "admin@example.com"}}
+        if args[0] == "rest":
+            assert args[args.index("--method") + 1] == "get"
+            assert args[args.index("--url") + 1] == "https://graph.microsoft.com/v1.0/organization"
+            return self.organization
         if cmd[:3] == ("ad", "sp", "show"):
             return GRAPH_SCOPES
         if cmd[:3] == ("ad", "app", "list"):
@@ -372,10 +390,84 @@ def test_create_flow_writes_config_and_never_prints_secrets(tmp_path, capsys):
     assert az.resource_access_file == [cl_setup.required_resource_access(DELEGATED_SCOPES, GRAPH_SCOPES)]
     reset = next(args for args, _ in az.calls if args[:4] == ["ad", "app", "credential", "reset"])
     assert reset[reset.index("--years") + 1] == "2" and "--append" in reset
+    assert not any(args[0] == "rest" and "get" not in args for args, _ in az.calls)
     assert az.called("ad", "sp", "create", "--id", APP_ID)
     assert az.calls[-1] == (["logout"], True)
     assert not any("consent" in c or "role" in c for c in az.commands())
     assert not az.called("ad", "app", "delete")
+
+
+def test_create_prints_the_signed_in_tenant_before_creating_the_app(tmp_path, capsys):
+    az = FakeAz()
+    printed = []
+
+    def recording_az(args, capture=True):
+        if args[:3] == ["ad", "app", "create"]:
+            printed.append(capsys.readouterr().out)
+        return az(args, capture)
+
+    assert cl_setup.main([], az=recording_az, out_dir=tmp_path) == 0
+    out = printed[0]
+    assert f"Tenant: Contoso Ltd (contoso.com), tenant ID {TENANT}" in out
+    # Only the name and the default domain come out of the organization object.
+    rest = capsys.readouterr().out + out
+    for other in ("contoso.onmicrosoft.com", "it@contoso.com", "Secret Street", "admin@example.com"):
+        assert other not in rest
+
+
+def test_tenant_line_falls_back_to_the_id_when_the_name_cannot_be_read(tmp_path, capsys):
+    az = FakeAz()
+    az.fail("rest", stderr="ERROR: Forbidden")
+    assert cl_setup.main([], az=az, out_dir=tmp_path) == 0
+    out = capsys.readouterr().out
+    assert f"Tenant ID: {TENANT} (its name could not be read)" in out
+
+
+def test_tenant_name_is_stripped_of_control_characters(tmp_path, capsys):
+    az = FakeAz()
+    az.organization["value"][0]["displayName"] = "Evil\x1b[2J\nCorp"
+    assert cl_setup.main([], az=az, out_dir=tmp_path) == 0
+    out = capsys.readouterr().out
+    assert "\x1b" not in out
+    assert "Tenant: Evil [2J Corp (contoso.com)" in out
+
+
+@pytest.mark.parametrize("tenant", [TENANT, "contoso.onmicrosoft.com"])
+def test_tenant_option_is_passed_to_sign_in(tmp_path, tenant):
+    az = FakeAz()
+    assert cl_setup.main(["--tenant", tenant], az=az, out_dir=tmp_path) == 0
+    assert az.calls[0] == (
+        ["login", "--use-device-code", "--allow-no-subscriptions", "--tenant", tenant],
+        False,
+    )
+
+
+def test_tenant_option_is_passed_to_sign_in_for_rotate(tmp_path):
+    az = FakeAz(creds=[{"keyId": "key-old", "endDateTime": "2027-01-01T00:00:00+00:00"}], secret=NEW_SECRET)
+    write_both(tmp_path, complete_config())
+    assert cl_setup.main(["--rotate-secret", "--tenant", TENANT], az=az, out_dir=tmp_path) == 0
+    assert az.calls[0] == (
+        ["login", "--use-device-code", "--allow-no-subscriptions", "--tenant", TENANT],
+        False,
+    )
+
+
+@pytest.mark.parametrize("tenant", ["--use-device-code", "contoso", "a b.com", "", "x;y.com"])
+def test_invalid_tenant_option_is_refused_before_sign_in(tmp_path, capsys, tenant):
+    az = FakeAz()
+    with pytest.raises(SystemExit) as exc:
+        cl_setup.main(["--tenant", tenant], az=az, out_dir=tmp_path)
+    assert exc.value.code == 2
+    assert az.calls == []
+    assert_nothing_written(tmp_path)
+
+
+def test_signed_in_tenant_must_match_a_tenant_id_option(tmp_path, capsys):
+    az = FakeAz(tenant="99999999-2222-4333-8444-555555555555")
+    assert cl_setup.main(["--tenant", TENANT], az=az, out_dir=tmp_path) == 1
+    assert not az.called("ad")
+    assert TENANT in capsys.readouterr().err
+    assert_nothing_written(tmp_path)
 
 
 @pytest.mark.parametrize("failure", ["sp_create", "secret", "credential_list", "write", "main_write"])
