@@ -27,7 +27,7 @@ import threading
 import time
 import socket
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -105,7 +105,6 @@ def _build_startup_patches():
         patch("app.main.verify_required_schema", return_value=None),
         patch("app.main.recover_stuck_executions", return_value={"processed": 0, "failed": 0, "verified_complete": 0}),
         patch("app.main.verify_redis_available_in_production", return_value=None),
-        patch("app.main.verify_graph_remediation_permissions_startup", new=AsyncMock(return_value=None)),
         patch("app.main.scheduler_loop", _noop_scheduler),
     ]
 

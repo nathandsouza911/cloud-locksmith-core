@@ -27,7 +27,7 @@ async def verify_service_account_disabled(
         }
     try:
         adapter = get_identity_provider_adapter(db=db, tenant=tenant)
-        user = await adapter.get_user_account_state(user_id, use_application_token=False)
+        user = await adapter.get_user_account_state(user_id)
     except GraphAPIError as exc:
         if exc.status_code == 404:
             return {

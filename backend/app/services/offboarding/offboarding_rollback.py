@@ -12,7 +12,7 @@ from app.services.graph_client import (
     GraphAPIError,
     fetch_user_memberof_directory_roles,
     graph_post,
-    set_user_account_enabled_with_app_token,
+    set_user_account_enabled_for_tenant,
 )
 from app.services.offboarding_service import reopen_user_findings_from_offboarding
 
@@ -78,12 +78,11 @@ async def rollback_offboarding(
     errors: list[str] = []
 
     try:
-        await set_user_account_enabled_with_app_token(
+        await set_user_account_enabled_for_tenant(
+            tenant=tenant,
             user_id=user_id,
             enabled=True,
-            tenant_id=tenant.id,
             db=db,
-            tenant=tenant,
         )
         restore_results["user_enabled"] = True
     except Exception as exc:

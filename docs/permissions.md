@@ -43,14 +43,11 @@ during sign-in and not stored.
 
 `User.Read.All Directory.Read.All Reports.Read.All`
 
-## App-only (client credentials)
+## No app-only (client credentials) token
 
-The backend can also request an app-only token
-(`https://graph.microsoft.com/.default`) for the tenant set in `MICROSOFT_TENANT`. At
-startup it checks that this app has the application permissions listed in
-`REQUIRED_GRAPH_REMEDIATION_PERMISSIONS` (default `User.EnableDisableAccount.All`). In
-production a missing permission stops startup; elsewhere it is logged as a warning. The
-check is skipped in demo mode.
+The backend never requests an app-only token. Every Graph read and write uses the
+connected tenant's own delegated token, and a write is refused unless that token's `tid`
+is the tenant being changed. You do not need to grant any application permissions.
 
 ## Least privilege notes
 

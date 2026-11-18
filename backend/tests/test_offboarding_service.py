@@ -486,7 +486,7 @@ def test_rollback_user_offboarding_reopens_user_findings(db_session, monkeypatch
         return []
 
     monkeypatch.setattr(
-        "app.services.offboarding.offboarding_rollback.set_user_account_enabled_with_app_token",
+        "app.services.offboarding.offboarding_rollback.set_user_account_enabled_for_tenant",
         fake_enable_user,
     )
     monkeypatch.setattr(

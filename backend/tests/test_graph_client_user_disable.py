@@ -52,34 +52,67 @@ def _seed_tenant(db: Session, tenant_id: str = "tenant-graph") -> Tenant:
     return tenant
 
 
-def test_disable_blocks_on_tenant_context_mismatch(monkeypatch, db_session):
-    token = _make_token(
-        {
-            "tid": "tenant-from-token",
-            "roles": ["User.EnableDisableAccount.All"],
-        }
-    )
-
-    async def fake_get_graph_app_token():
+def _use_tenant_token(monkeypatch, tenant: Tenant, token: str) -> None:
+    async def fake_get_valid_access_token(current_tenant, db=None, force_refresh: bool = False):
+        assert current_tenant == tenant.id
         return token
+
+    monkeypatch.setattr(graph_client, "get_valid_access_token", fake_get_valid_access_token)
+
+
+@pytest.mark.parametrize("claims", [{"tid": "tenant-from-token"}, {}])
+def test_disable_blocks_when_token_tenant_is_not_the_target_tenant(monkeypatch, db_session, claims):
+    tenant = _seed_tenant(db_session, "tenant-expected")
+    token = _make_token({**claims, "scp": "User.ReadWrite.All"})
 
     async def fail_if_called(*args, **kwargs):
         raise AssertionError("graph resource calls must not happen on tenant mismatch")
 
-    monkeypatch.setattr(graph_client, "get_graph_app_token", fake_get_graph_app_token)
+    _use_tenant_token(monkeypatch, tenant, token)
     monkeypatch.setattr(graph_client, "_graph_write_request_with_token", fail_if_called)
     monkeypatch.setattr(graph_client, "graph_get_with_token", fail_if_called)
 
     with pytest.raises(GraphVerificationError, match="TENANT_CONTEXT_MISMATCH"):
         asyncio.run(
-            graph_client.set_user_account_enabled_with_app_token(
+            graph_client.set_user_account_enabled_for_tenant(
+                tenant=tenant,
                 user_id="user-1",
                 enabled=False,
-                tenant_id="tenant-expected",
                 db=db_session,
                 user_email="user1@example.com",
             )
         )
+
+
+def test_disable_requires_a_tenant():
+    with pytest.raises(TypeError):
+        asyncio.run(graph_client.set_user_account_enabled_for_tenant(user_id="user-1", enabled=False, db=None))
+
+
+def test_no_app_only_token_paths_remain():
+    """The app-only token is minted in the publisher tenant, never a customer
+    tenant. No helper that reads or writes Graph with it may exist."""
+    import importlib
+
+    for name in (
+        "get_graph_app_token",
+        "graph_get_app",
+        "graph_get_app_all",
+        "fetch_user_memberof_directory_roles_with_app_token",
+        "get_user_directory_roles_with_app_token",
+        "set_user_account_enabled_with_app_token",
+        "verify_graph_remediation_permissions_startup",
+    ):
+        assert not hasattr(graph_client, name), name
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("app.services.graph_app_token")
+
+
+def test_startup_does_not_request_an_app_only_token():
+    from app.main import app
+
+    handlers = [getattr(h, "__name__", "") for h in app.router.on_startup]
+    assert "verify_graph_remediation_permissions" not in handlers
 
 
 def test_disable_fallback_updates_stale_user_references(monkeypatch, db_session):
@@ -124,13 +157,10 @@ def test_disable_fallback_updates_stale_user_references(monkeypatch, db_session)
     token = _make_token(
         {
             "tid": tenant.id,
-            "roles": ["User.EnableDisableAccount.All"],
+            "scp": "User.ReadWrite.All",
         }
     )
     patched_paths: list[str] = []
-
-    async def fake_get_graph_app_token():
-        return token
 
     async def fake_graph_get_with_token(access_token: str, path: str):
         if path.startswith("/users/stale-user-id?"):
@@ -157,24 +187,19 @@ def test_disable_fallback_updates_stale_user_references(monkeypatch, db_session)
             return {"value": []}
         raise AssertionError(f"unexpected graph lookup path: {path}")
 
-    async def fake_get_roles(user_id: str):
-        assert user_id == "resolved-user-id"
-        return []
-
     async def fake_patch(*, method: str, path: str, access_token: str, payload: dict | None = None):
         patched_paths.append(path)
         return {}
 
-    monkeypatch.setattr(graph_client, "get_graph_app_token", fake_get_graph_app_token)
+    _use_tenant_token(monkeypatch, tenant, token)
     monkeypatch.setattr(graph_client, "graph_get_with_token", fake_graph_get_with_token)
-    monkeypatch.setattr(graph_client, "get_user_directory_roles_with_app_token", fake_get_roles)
     monkeypatch.setattr(graph_client, "_graph_write_request_with_token", fake_patch)
 
     asyncio.run(
-        graph_client.set_user_account_enabled_with_app_token(
+        graph_client.set_user_account_enabled_for_tenant(
+            tenant=tenant,
             user_id="stale-user-id",
             enabled=False,
-            tenant_id=tenant.id,
             db=db_session,
             user_email="user@example.com",
         )
@@ -192,7 +217,7 @@ def test_disable_fallback_updates_stale_user_references(monkeypatch, db_session)
     assert session.snapshot["user_id"] == "resolved-user-id"
 
 
-def test_disable_uses_tenant_scoped_token_when_tenant_is_provided(monkeypatch, db_session):
+def test_disable_uses_tenant_scoped_token(monkeypatch, db_session):
     tenant = _seed_tenant(db_session, "tenant-scoped")
     token = _make_token(
         {
@@ -205,9 +230,6 @@ def test_disable_uses_tenant_scoped_token_when_tenant_is_provided(monkeypatch, d
     async def fake_get_valid_access_token(current_tenant, db=None, force_refresh: bool = False):
         assert current_tenant == tenant.id
         return token
-
-    async def fail_if_app_token_called():
-        raise AssertionError("global app token must not be used for tenant-scoped disable")
 
     async def fake_graph_get_with_token(access_token: str, path: str):
         assert access_token == token
@@ -228,18 +250,16 @@ def test_disable_uses_tenant_scoped_token_when_tenant_is_provided(monkeypatch, d
         return {}
 
     monkeypatch.setattr(graph_client, "get_valid_access_token", fake_get_valid_access_token)
-    monkeypatch.setattr(graph_client, "get_graph_app_token", fail_if_app_token_called)
     monkeypatch.setattr(graph_client, "graph_get_with_token", fake_graph_get_with_token)
     monkeypatch.setattr(graph_client, "_graph_write_request_with_token", fake_patch)
 
     asyncio.run(
-        graph_client.set_user_account_enabled_with_app_token(
+        graph_client.set_user_account_enabled_for_tenant(
+            tenant=tenant,
             user_id="user-tenant",
             enabled=False,
-            tenant_id=tenant.id,
             db=db_session,
             user_email="user@example.com",
-            tenant=tenant,
         )
     )
 
@@ -251,12 +271,9 @@ def test_disable_raises_user_not_found_when_lookup_and_fallback_fail(monkeypatch
     token = _make_token(
         {
             "tid": tenant.id,
-            "roles": ["User.EnableDisableAccount.All"],
+            "scp": "User.ReadWrite.All",
         }
     )
-
-    async def fake_get_graph_app_token():
-        return token
 
     async def fake_graph_get_with_token(access_token: str, path: str):
         if path.startswith("/users/missing-user?"):
@@ -275,16 +292,16 @@ def test_disable_raises_user_not_found_when_lookup_and_fallback_fail(monkeypatch
     async def fail_if_called(*args, **kwargs):
         raise AssertionError("PATCH must not execute when the user cannot be resolved")
 
-    monkeypatch.setattr(graph_client, "get_graph_app_token", fake_get_graph_app_token)
+    _use_tenant_token(monkeypatch, tenant, token)
     monkeypatch.setattr(graph_client, "graph_get_with_token", fake_graph_get_with_token)
     monkeypatch.setattr(graph_client, "_graph_write_request_with_token", fail_if_called)
 
     with pytest.raises(GraphVerificationError, match="USER_NOT_FOUND"):
         asyncio.run(
-            graph_client.set_user_account_enabled_with_app_token(
+            graph_client.set_user_account_enabled_for_tenant(
+                tenant=tenant,
                 user_id="missing-user",
                 enabled=False,
-                tenant_id=tenant.id,
                 db=db_session,
                 user_email="missing@example.com",
             )

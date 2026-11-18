@@ -34,7 +34,7 @@ def test_engine_returns_verification_result_for_verifiable_control():
     from types import SimpleNamespace
 
     class _FakeAdapter:
-        async def get_user_account_state(self, user_id, *, use_application_token=False):
+        async def get_user_account_state(self, user_id):
             return {"accountEnabled": False}
 
     def _fake_identity(*, db, tenant):
@@ -82,7 +82,7 @@ def test_engine_result_to_legacy_dict_matches_expected_shape():
     import unittest.mock as mock
 
     class _FakeAdapter:
-        async def get_user_account_state(self, user_id, *, use_application_token=False):
+        async def get_user_account_state(self, user_id):
             return {"accountEnabled": True}
 
     with mock.patch.object(mod, "get_identity_provider_adapter", lambda **kw: _FakeAdapter()):
@@ -202,7 +202,7 @@ def test_parity_dormant_account_disabled():
     import app.services.remediation.verification.dormant_account_verifier as mod
 
     class _FakeAdapter:
-        async def get_user_account_state(self, uid, *, use_application_token=False):
+        async def get_user_account_state(self, uid):
             return {"accountEnabled": False}
 
     cr = SimpleNamespace(evidence={"user_id": "u-1"}, id=1)
@@ -218,7 +218,7 @@ def test_parity_dormant_account_still_enabled():
     import app.services.remediation.verification.dormant_account_verifier as mod
 
     class _FakeAdapter:
-        async def get_user_account_state(self, uid, *, use_application_token=False):
+        async def get_user_account_state(self, uid):
             return {"accountEnabled": True}
 
     cr = SimpleNamespace(evidence={"user_id": "u-2"}, id=1)

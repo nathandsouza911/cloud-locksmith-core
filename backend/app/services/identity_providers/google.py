@@ -350,10 +350,7 @@ class GoogleWorkspaceAdapter(IdentityProviderAdapter):
     async def get_user_account_state(
         self,
         user_id: str,
-        *,
-        use_application_token: bool = False,
     ) -> dict[str, Any]:
-        del use_application_token
         user = await self._request(
             "GET",
             f"/users/{quote(str(user_id), safe='')}",

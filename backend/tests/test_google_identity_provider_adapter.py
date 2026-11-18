@@ -231,8 +231,7 @@ def test_google_set_user_account_enabled_returns_mismatched_state_after_retries(
         assert payload == {"suspended": False}
         return {}
 
-    async def fake_get_user_account_state(user_id, *, use_application_token=False):
-        del use_application_token
+    async def fake_get_user_account_state(user_id):
         assert user_id == "user-1"
         return {
             "id": "user-1",

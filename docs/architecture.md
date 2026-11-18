@@ -6,8 +6,8 @@ browser ──> dashboard (Next.js 14, :3000) ──HTTPS/JSON + cookie──> a
                                      ┌──────────────────────────────┼─────────────────────┐
                                      │                              │                     │
                               Postgres 15                      Redis 7            Microsoft Graph
-                        (tenants, findings, audit,     (token denylist, rate      (delegated + app-only
-                         snapshots, campaigns)          limits, lockout)            tokens; never in demo)
+                        (tenants, findings, audit,     (token denylist, rate      (delegated tokens
+                         snapshots, campaigns)          limits, lockout)            only; never in demo)
 ```
 
 ## Components

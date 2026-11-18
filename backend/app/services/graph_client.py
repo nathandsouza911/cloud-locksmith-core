@@ -10,7 +10,6 @@ import httpx
 from app.config import settings
 from app.db.models.tenant import Tenant
 from app.services.remediation.lifecycle import BlockReason
-from app.services.graph_app_token import get_graph_app_token
 from app.services.microsoft_oauth_scopes import REQUIRED_AUTHORIZATION_POLICY_SCOPE
 from app.services.token_manager import get_valid_access_token, has_delegated_oauth_token
 
@@ -533,57 +532,6 @@ async def fetch_user_memberof_directory_roles(db, tenant: Tenant, user_id: str) 
             return []
 
 
-async def fetch_user_memberof_directory_roles_with_app_token(
-    user_id: str,
-) -> list[dict[str, str]]:
-    path = f"/users/{user_id}/memberOf"
-    try:
-        payload = await graph_get_app(path)
-        return _normalize_memberof_directory_roles(payload)
-    except GraphAPIError as exc:
-        logger.warning(
-            "memberof_query_failed %s",
-            {
-                "event": "MEMBEROF_QUERY_FAILED",
-                "used_select": False,
-                "user_id": user_id,
-                "status_code": exc.status_code,
-            },
-        )
-        try:
-            payload = await graph_get_app(path)
-            return _normalize_memberof_directory_roles(payload)
-        except Exception:
-            return []
-    except Exception as exc:
-        logger.warning(
-            "memberof_query_failed %s",
-            {
-                "event": "MEMBEROF_QUERY_FAILED",
-                "used_select": False,
-                "user_id": user_id,
-                "error": str(exc),
-            },
-        )
-        try:
-            payload = await graph_get_app(path)
-            return _normalize_memberof_directory_roles(payload)
-        except Exception:
-            return []
-
-
-async def get_user_directory_roles_with_app_token(user_id: str) -> list[dict[str, Any]]:
-    member_of = await fetch_user_memberof_directory_roles_with_app_token(user_id)
-    return [
-        {
-            "id": item["id"],
-            "displayName": item["displayName"],
-            "@odata.type": "#microsoft.graph.directoryRole",
-        }
-        for item in member_of
-    ]
-
-
 async def get_user_directory_roles_with_token(
     *,
     access_token: str,
@@ -612,18 +560,19 @@ def _log_tenant_context(*, user_id: str, token_tid: str | None, expected_tenant_
     )
 
 
-def _ensure_tenant_context(*, claims: dict[str, Any], expected_tenant_id: str | None, user_id: str) -> None:
+def _ensure_tenant_context(*, claims: dict[str, Any], expected_tenant_id: str, user_id: str) -> None:
     token_tid = claims.get("tid")
     _log_tenant_context(
         user_id=user_id,
         token_tid=token_tid if isinstance(token_tid, str) else None,
         expected_tenant_id=expected_tenant_id,
     )
-    if expected_tenant_id and token_tid and token_tid != expected_tenant_id:
+    # Fail closed: a missing or different tid means the token is not for this tenant.
+    if not expected_tenant_id or token_tid != expected_tenant_id:
         raise GraphVerificationError("TENANT_CONTEXT_MISMATCH")
 
 
-async def _get_user_with_app_token(*, access_token: str, user_id: str) -> dict[str, Any] | None:
+async def _get_user_with_token(*, access_token: str, user_id: str) -> dict[str, Any] | None:
     try:
         return await graph_get_with_token(
             access_token,
@@ -635,7 +584,7 @@ async def _get_user_with_app_token(*, access_token: str, user_id: str) -> dict[s
         raise
 
 
-async def _lookup_user_by_upn_with_app_token(
+async def _lookup_user_by_upn_with_token(
     *,
     access_token: str,
     user_email: str,
@@ -751,7 +700,7 @@ async def _resolve_user_for_disable(
     user_id: str,
     user_email: str | None,
 ) -> tuple[str, dict[str, Any]]:
-    user_payload = await _get_user_with_app_token(access_token=access_token, user_id=user_id)
+    user_payload = await _get_user_with_token(access_token=access_token, user_id=user_id)
     logger.info(
         "USER_DISABLE_ATTEMPT %s",
         {
@@ -764,7 +713,7 @@ async def _resolve_user_for_disable(
         return user_id, user_payload
 
     if user_email:
-        fallback_user = await _lookup_user_by_upn_with_app_token(
+        fallback_user = await _lookup_user_by_upn_with_token(
             access_token=access_token,
             user_email=user_email,
         )
@@ -790,31 +739,22 @@ async def _resolve_user_for_disable(
     raise GraphVerificationError("USER_NOT_FOUND")
 
 
-async def set_user_account_enabled_with_app_token(
+async def set_user_account_enabled_for_tenant(
     *,
+    tenant: Tenant,
     user_id: str,
     enabled: bool,
-    tenant_id: str | None = None,
     db=None,
     user_email: str | None = None,
-    tenant: Tenant | None = None,
 ):
-    if tenant is not None:
-        if tenant_id and tenant.id != tenant_id:
-            raise GraphVerificationError("TENANT_CONTEXT_MISMATCH")
-        access_token = await get_valid_access_token(tenant.id, db=db)
-        claims = validate_required_graph_permissions(
-            access_token=access_token,
-            require_application_token=False,
-        )
-        expected_tenant_id = tenant.id
-    else:
-        access_token = await get_graph_app_token()
-        claims = validate_required_graph_permissions(
-            access_token=access_token,
-            require_application_token=True,
-        )
-        expected_tenant_id = tenant_id
+    """Enable or disable a user in ``tenant`` with that tenant's own delegated
+    token. Refuses unless the token's tid is exactly the tenant's id."""
+    access_token = await get_valid_access_token(tenant.id, db=db)
+    claims = validate_required_graph_permissions(
+        access_token=access_token,
+        require_application_token=False,
+    )
+    expected_tenant_id = tenant.id
     _ensure_tenant_context(
         claims=claims,
         expected_tenant_id=expected_tenant_id,
@@ -857,69 +797,6 @@ async def set_user_account_enabled_with_app_token(
                 exc.path,
             )
         raise
-
-
-async def verify_graph_remediation_permissions_startup() -> None:
-    access_token = await get_graph_app_token()
-    validate_required_graph_permissions(
-        access_token=access_token,
-        required_permissions=set(settings.REQUIRED_GRAPH_REMEDIATION_PERMISSIONS),
-        require_application_token=True,
-    )
-
-
-async def graph_get_app(path: str):
-    """App-only Graph GET. WARNING: the app-only token is minted against the
-    fixed publisher tenant (settings.MICROSOFT_TENANT), so this reads the
-    PUBLISHER directory — never a customer tenant. Do NOT use it to read or
-    decide anything about a customer's users/policies; use the delegated,
-    tenant-scoped helpers (graph_get(db, tenant, ...)) for customer data.
-    """
-    access_token = await get_graph_app_token()
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-    }
-    response = await _graph_request(
-        method="GET",
-        path=path,
-        headers=headers,
-    )
-    if response.status_code >= 400:
-        _raise_graph_error(
-            method="GET",
-            path=path,
-            response=response,
-            access_token=access_token,
-        )
-    return response.json() if response.text else {}
-
-
-async def graph_get_app_all(path: str):
-    results = []
-    response = await graph_get_app(path)
-    results.extend(response.get("value", []))
-
-    next_link = response.get("@odata.nextLink")
-    while next_link:
-        access_token = await get_graph_app_token()
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
-        page = await _graph_request(method="GET", path=next_link, headers=headers)
-        if page.status_code >= 400:
-            _raise_graph_error(
-                method="GET",
-                path=next_link,
-                response=page,
-                access_token=access_token,
-            )
-        data = page.json()
-        results.extend(data.get("value", []))
-        next_link = data.get("@odata.nextLink")
-
-    return results
 
 
 async def graph_get_with_token(

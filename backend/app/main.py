@@ -11,7 +11,7 @@ from app.middleware.tenant_context import TenantContextMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.core.redis_client import verify_redis_available_in_production
 from app.services.auth.jwt_service import decode_access_token
-from app.services.graph_client import TenantNotConnectedError, verify_graph_remediation_permissions_startup
+from app.services.graph_client import TenantNotConnectedError
 from app.db.models.compliance_result import ComplianceResult
 from app.db.models.control_execution import ControlExecution
 from app.db.models.control_snapshot import ControlSnapshot
@@ -479,23 +479,6 @@ def validate_no_legacy_lowercase_ca_control_ids():
         if violations:
             raise RuntimeError("Legacy lowercase CA control IDs detected at startup: " + ", ".join(violations))
     logger_startup.info("legacy_ca_control_ids_validated")
-
-
-@app.on_event("startup")
-async def verify_graph_remediation_permissions():
-    if settings.DEMO_MODE:
-        logger_startup.info("graph_permission_check_skipped demo_mode")
-        return
-    try:
-        await verify_graph_remediation_permissions_startup()
-    except Exception as exc:
-        if settings.ENVIRONMENT.lower() == "production":
-            raise RuntimeError("Graph app missing required permissions for remediation") from exc
-        logger_startup.warning(
-            "graph_permission_check_failed env=%s error=%s — skipping in non-production",
-            settings.ENVIRONMENT,
-            exc,
-        )
 
 
 @app.on_event("startup")
