@@ -15,9 +15,18 @@ licence the tenant does not have are marked NOT_EVALUATED rather than failing.
 ## 2. Preview (no changes)
 
 For `CA_MFA_ALL_USERS` and `CA_MFA_ADMINS` the dashboard offers **Simulate Fix**
-(`POST /api/v1/simulations/run`): a pure calculation over a snapshot of the tenant's
-users and roles that reports how many users would be required to use MFA, blocked, or
-unaffected, and how many admins are affected. It calls no Graph write endpoint.
+(`POST /api/v1/simulations/run`, body `{"control_id": ...}` only). The server reads the
+session tenant from Graph (users, transitive group members, role holders by role
+template ID, existing Conditional Access policies), builds the same policy Apply would
+send (enforced, the control's default rollout, registered break-glass accounts
+excluded), and evaluates it together with the existing policies. It reports how many
+users would be required to use MFA, blocked or unaffected, how many of them the fix
+newly affects (users whose access becomes stricter than it is today; with security
+defaults on, every user already counts as required to use MFA), and how many admins are
+affected. With security defaults on it also warns that Conditional Access policies are not
+enforced until security defaults are turned off. Identity data sent by the browser is
+refused; if any Graph read fails the answer is an error, never a partial result. It
+calls no Graph write endpoint.
 
 ## 3. Approve
 

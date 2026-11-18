@@ -95,6 +95,11 @@ and makes your account the tenant **owner**, bound to your Entra object ID (`oid
   directory. This needs the full connect (step 6); after a Preview sign-in only, it says
   that a full connect is required.
 
+**CA Coverage** (under Clients) shows, for every user, whether Conditional Access
+requires MFA and blocks legacy authentication (and admin MFA for privileged-role
+holders), and names the policy and exclusion that leaves each gap. It reads with the
+permissions you already granted and changes nothing.
+
 Simulation is a calculation and changes nothing. Executing a fix changes the tenant: see
 `remediation-lifecycle.md` before you approve or execute anything.
 

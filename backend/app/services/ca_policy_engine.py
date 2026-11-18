@@ -435,6 +435,31 @@ def build_policy(
     target_group_id: str | None = None,
     policy_version: int | None = None,
 ) -> dict:
+    """The policy Apply writes. Refuses without break-glass accounts (never lock admins out)."""
+    policy = build_policy_document(
+        control_id,
+        mode,
+        rollout_phase,
+        break_glass_ids,
+        target_group_id=target_group_id,
+        policy_version=policy_version,
+    )
+    if not break_glass_ids:
+        raise ControlEngineError("Break-glass accounts are required before CA mutation")
+    return policy
+
+
+def build_policy_document(
+    control_id: str,
+    mode: str,
+    rollout_phase: str,
+    break_glass_ids: list[str],
+    *,
+    target_group_id: str | None = None,
+    policy_version: int | None = None,
+) -> dict:
+    """Policy document for ``control_id`` without the break-glass gate. Read-only callers
+    (Simulate Fix) use it so they evaluate exactly what Apply would send."""
     normalized_control_id = normalize_control_id(control_id)
     if normalized_control_id == CONTROL_BREAK_GLASS_EXCLUSION:
         raise ControlEngineError(
@@ -442,8 +467,6 @@ def build_policy(
         )
     normalized_mode = _normalize_mode(mode)
     normalized_rollout_phase = _normalize_rollout_phase(rollout_phase)
-    if not break_glass_ids:
-        raise ControlEngineError("Break-glass accounts are required before CA mutation")
     normalized_policy_version = int(policy_version or 1)
     if normalized_policy_version < 1:
         raise ControlEngineError("policy_version must be >= 1")

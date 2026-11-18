@@ -234,21 +234,77 @@ def test_legacy_auth_fail_when_not_targeting_all_apps():
     assert results[0]["passed"] is False
 
 
-def test_legacy_auth_pass_with_implicit_block():
-    # null grantControls = implicit block
+def _legacy_policy(pid: str, client_app_types: list[str], **overrides) -> dict:
     policy = {
-        "id": "policy-implicit-block",
+        "id": pid,
         "state": "enabled",
         "conditions": {
             "users": {"includeUsers": ["All"]},
-            "clientAppTypes": ["other"],
+            "clientAppTypes": client_app_types,
             "applications": {"includeApplications": ["All"]},
         },
-        "grantControls": None,
+        "grantControls": {"operator": "OR", "builtInControls": ["block"]},
     }
-    ctx = _ctx([policy])
-    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=ctx))
+    policy.update(overrides)
+    return policy
+
+
+def test_legacy_auth_fail_when_grant_controls_null():
+    # Graph returns grantControls null for session-control-only policies; that is not a block.
+    policy = _legacy_policy("policy-null-grant", ["exchangeActiveSync", "other"], grantControls=None)
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False
+    assert results[0]["evidence"]["blocking_policy_ids"] == []
+
+
+def test_legacy_auth_fail_when_only_other_blocked():
+    policy = _legacy_policy("policy-other-only", ["other"])
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False
+    assert results[0]["evidence"]["unblocked_client_app_types"] == ["exchangeActiveSync"]
+
+
+def test_legacy_auth_fail_when_only_exchange_active_sync_blocked():
+    policy = _legacy_policy("policy-eas-only", ["exchangeActiveSync"])
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False
+    assert results[0]["evidence"]["unblocked_client_app_types"] == ["other"]
+
+
+def test_legacy_auth_pass_when_two_policies_together_block_both_types():
+    policies = [
+        _legacy_policy("policy-eas", ["exchangeActiveSync"]),
+        _legacy_policy("policy-other", ["other"]),
+    ]
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=_ctx(policies)))
     assert results[0]["passed"] is True
+    assert sorted(results[0]["evidence"]["blocking_policy_ids"]) == ["policy-eas", "policy-other"]
+    assert results[0]["evidence"]["unblocked_client_app_types"] == []
+
+
+def test_legacy_auth_fail_when_block_targets_only_some_users():
+    policy = _legacy_policy("policy-one-group", ["exchangeActiveSync", "other"])
+    policy["conditions"]["users"] = {"includeGroups": ["11111111-1111-1111-1111-111111111111"]}
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False
+
+
+def test_legacy_auth_pass_when_all_users_with_break_glass_excluded():
+    policy = _legacy_policy("policy-bg-excluded", ["exchangeActiveSync", "other"])
+    policy["conditions"]["users"] = {
+        "includeUsers": ["All"],
+        "excludeUsers": ["22222222-2222-2222-2222-222222222222"],
+    }
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=_ctx([policy])))
+    assert results[0]["passed"] is True
+
+
+def test_legacy_auth_fail_when_block_is_report_only():
+    policy = _legacy_policy(
+        "policy-report-only", ["exchangeActiveSync", "other"], state="enabledForReportingButNotEnforced"
+    )
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False
 
 
 def test_legacy_auth_returns_empty_when_policies_fetch_failed():
@@ -392,4 +448,70 @@ def test_guest_mfa_fail_when_policy_not_broad_enough():
     }
     ctx = _ctx([policy])
     results = asyncio.run(detect_ca_guest_mfa(ctx=ctx))
+    assert results[0]["passed"] is False
+
+
+# ---------------------------------------------------------------------------
+# null grantControls is not a block (Graph: session-control-only policy grants access)
+# ---------------------------------------------------------------------------
+
+
+def _all_users_all_apps(pid: str, **conditions) -> dict:
+    return {
+        "id": pid,
+        "state": "enabled",
+        "conditions": {
+            "users": {"includeUsers": ["All"]},
+            "applications": {"includeApplications": ["All"]},
+            **conditions,
+        },
+        "grantControls": None,
+        "sessionControls": {"signInFrequency": {"isEnabled": True, "value": 1, "type": "hours"}},
+    }
+
+
+def test_device_code_fail_when_grant_controls_null():
+    policy = _all_users_all_apps("p-dcf-null", authenticationFlows={"transferMethods": ["deviceCodeFlow"]})
+    results = asyncio.run(detect_ca_device_code_flow_blocked(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False
+
+
+def test_authentication_transfer_fail_when_grant_controls_null():
+    policy = _all_users_all_apps("p-at-null", authenticationFlows={"transferMethods": ["authenticationTransfer"]})
+    results = asyncio.run(detect_ca_authentication_transfer_blocked(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False
+
+
+def test_high_risk_sign_in_block_fail_when_grant_controls_null():
+    from app.services.detection.conditional_access.ca_risk_checks import detect_ca_high_risk_sign_in_block
+
+    policy = _all_users_all_apps("p-risk-null", signInRiskLevels=["high"])
+    results = asyncio.run(detect_ca_high_risk_sign_in_block(ctx=_ctx([policy])))
+    assert results[0]["passed"] is False
+
+
+def test_legacy_auth_pass_when_security_defaults_enabled():
+    # Security defaults block legacy authentication tenant-wide without a CA policy.
+    ctx = TenantGraphContext(
+        tenant_id=TENANT_ID,
+        fetched_at=datetime.now(tz=timezone.utc),
+        conditional_access_policies=[],
+        break_glass_accounts=[],
+        security_defaults_enabled=True,
+    )
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=ctx))
+    assert results[0]["passed"] is True
+    assert results[0]["evidence"]["detection_source"] == "security_defaults"
+    assert results[0]["evidence"]["unblocked_client_app_types"] == []
+
+
+def test_legacy_auth_still_evaluates_policies_when_security_defaults_off():
+    ctx = TenantGraphContext(
+        tenant_id=TENANT_ID,
+        fetched_at=datetime.now(tz=timezone.utc),
+        conditional_access_policies=[],
+        break_glass_accounts=[],
+        security_defaults_enabled=False,
+    )
+    results = asyncio.run(detect_ca_legacy_auth_other_blocked(ctx=ctx))
     assert results[0]["passed"] is False

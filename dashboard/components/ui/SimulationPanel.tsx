@@ -109,7 +109,20 @@ export default function SimulationPanel({
         </div>
       ) : (
         <>
-          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {simulation?.security_defaults_enabled ? (
+            <div className="mt-5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+              <p>
+                Security defaults are on: they already require MFA and block legacy authentication for every
+                user, so &ldquo;Newly affected&rdquo; counts only users this fix makes stricter.
+              </p>
+              <p className="mt-1">
+                Conditional Access policies cannot be enforced while security defaults stay on. This fix takes
+                effect only after you turn security defaults off.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-4">
               <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500">Blocked Users</p>
               <p className="mt-2 text-sm font-semibold text-red-300">{simulation?.blocked_users ?? 0}</p>
@@ -119,6 +132,13 @@ export default function SimulationPanel({
               <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500">MFA Required</p>
               <p className="mt-2 text-sm font-semibold text-yellow-300">
                 {simulation?.mfa_required_users ?? 0}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-4">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500">Newly Affected</p>
+              <p className="mt-2 text-sm font-semibold text-cyan-300">
+                {simulation?.newly_affected_users ?? 0}
               </p>
             </div>
 
