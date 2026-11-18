@@ -28,7 +28,9 @@ from app.config import settings
 
 _DEFAULT_EXPIRY_THRESHOLD_DAYS = 90
 
-_OWN_SECRET_REMEDIATION_HINT = "This is Cloud Locksmith's own app registration. In deploy/, run: docker compose run --rm setup --rotate-secret"
+_OWN_SECRET_REMEDIATION_HINT = (
+    "This is Cloud Locksmith's own app registration. In deploy/, run: docker compose run --rm setup --rotate-secret"
+)
 
 _TIER_CRITICAL_DAYS = 0  # already expired
 _TIER_HIGH_DAYS = 7
