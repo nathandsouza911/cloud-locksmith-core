@@ -1,7 +1,8 @@
 name: Images
 
-# Publishes the demo images to GitHub Container Registry when a release tag is pushed.
-# docker-compose.yml pulls these (and builds from source when they do not exist yet).
+# Publishes the images to GitHub Container Registry when a release tag is pushed.
+# docker-compose.yml (demo) and deploy/compose.yml (local install) pull these, and
+# build from source when they do not exist yet.
 on:
   push:
     tags: ["v*.*.*"]
@@ -19,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Version from tag, and check docker-compose.yml pins it
+      - name: Version from tag, and check both compose files pin it
         id: version
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -27,6 +28,11 @@ jobs:
           count=$(grep -c "cloud-locksmith-core-[a-z-]*:${version}\"\?$" docker-compose.yml || true)
           if [ "$count" -lt 3 ]; then
             echo "docker-compose.yml must pin the backend and dashboard-demo images to ${version} (found ${count} of 3)"
+            exit 1
+          fi
+          count=$(grep -c "cloud-locksmith-core-[a-z-]*:${version}\"\?$" deploy/compose.yml || true)
+          if [ "$count" -lt 2 ]; then
+            echo "deploy/compose.yml must pin the backend and dashboard images to ${version} (found ${count} of 2)"
             exit 1
           fi
 
@@ -68,3 +74,20 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/cloud-locksmith-core-dashboard-demo:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/cloud-locksmith-core-dashboard-demo:latest
+
+      - name: Dashboard, local-install build (deploy/compose.yml)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dashboard
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=http://localhost:8000
+            NEXT_PUBLIC_DEMO_MODE=false
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+          tags: |
+            ${{ env.REGISTRY }}/cloud-locksmith-core-dashboard:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/cloud-locksmith-core-dashboard:latest

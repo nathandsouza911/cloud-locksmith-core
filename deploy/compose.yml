@@ -1,0 +1,103 @@
+# Cloud Locksmith Core: local install for one Microsoft 365 tenant.
+#
+#   cd deploy
+#   docker compose run --rm setup     # once: app registration + cloud-locksmith.env
+#   docker compose up -d              # then open http://localhost:3000
+#
+# Setup writes cloud-locksmith.env next to this file (gitignored). Every value the
+# stack needs, including the database and Redis passwords, comes from that file; this
+# file holds no secret. Without it, `docker compose up` refuses to start anything.
+#
+# Images are pulled from ghcr.io; if they cannot be pulled, they are built from this
+# checkout. Every port binds 127.0.0.1 only. Stop the demo (docker compose down at
+# the repository root) first: both use ports 3000 and 8000.
+
+name: cloud-locksmith
+
+services:
+  # One-shot, interactive: device-code sign-in, then writes ./cloud-locksmith.env.
+  setup:
+    profiles: ["setup"]
+    build:
+      context: ..
+      dockerfile: deploy/setup/Dockerfile
+    image: cloud-locksmith-setup:local
+    pull_policy: build  # local-only image: always built from this checkout
+    volumes:
+      - ./:/out
+    stdin_open: true
+    tty: true
+
+  postgres:
+    image: postgres:15
+    env_file:
+      - path: cloud-locksmith.env
+        required: true
+    environment:
+      POSTGRES_USER: cloudlocksmith
+      POSTGRES_DB: cloudlocksmith
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudlocksmith -d cloudlocksmith"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks: [backend]
+
+  redis:
+    image: redis:7-alpine
+    env_file:
+      - path: cloud-locksmith.env
+        required: true
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks: [backend]
+
+  # The image's entrypoint applies migrations before starting the API.
+  api:
+    image: ghcr.io/nathandsouza911/cloud-locksmith-core-backend:0.2.0
+    pull_policy: missing
+    build: ../backend
+    env_file:
+      - path: cloud-locksmith.env
+        required: true
+    environment:
+      DEMO_MODE: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    networks: [backend, frontend]
+
+  dashboard:
+    image: ghcr.io/nathandsouza911/cloud-locksmith-core-dashboard:0.2.0
+    pull_policy: missing
+    build:
+      context: ../dashboard
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_DEMO_MODE: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    networks: [frontend]
+
+networks:
+  # Postgres and Redis are reachable only from the API.
+  backend:
+    internal: true
+  frontend: {}
+
+volumes:
+  db_data:
