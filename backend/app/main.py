@@ -358,6 +358,10 @@ from app.api.v1.simulations import router as simulations_router
 
 app.include_router(simulations_router, prefix="/api/v1")
 
+from app.api.v1.ca_coverage import router as ca_coverage_router
+
+app.include_router(ca_coverage_router, prefix="/api/v1")
+
 from app.api.v1.support import router as support_router
 
 app.include_router(support_router, prefix="/api/v1")

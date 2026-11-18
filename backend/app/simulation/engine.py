@@ -10,6 +10,9 @@ from app.simulation.policy_evaluator import get_applicable_policies
 from app.simulation.policy_parser import ConditionalAccessPolicy, PolicyParser
 
 
+_RESULT_RANK = {"ALLOW": 0, "MFA_REQUIRED": 1, "BLOCKED": 2}
+
+
 class SimulationEngine:
     """Placeholder orchestration engine for future simulation execution."""
 
@@ -30,28 +33,35 @@ class SimulationEngine:
         tenant_snapshot: dict[str, Any],
         proposed_change: dict[str, Any],
         role_mapping: dict[str, list[str]],
+        baseline_floor: str | None = None,
     ) -> dict[str, Any]:
         policies = tenant_snapshot.get("policies", [])
         merged_policies = self._merge_proposed_change(policies, proposed_change)
         users = self._extract_users(tenant_snapshot.get("users", []))
         group_map = self._normalize_membership_map(tenant_snapshot.get("groups", {}))
         role_map = self._normalize_membership_map(tenant_snapshot.get("roles", {}))
+        guest_ids = frozenset(self._normalize_string_list(tenant_snapshot.get("guests") or []))
         expander = IdentityExpander(group_map=group_map, role_map=role_map)
+        baseline_policies = self.policy_parser.parse_many([policy for policy in policies if isinstance(policy, dict)])
 
-        decisions: list[dict[str, Any]] = []
-        for user_id in users:
-            applicable_policies = get_applicable_policies(
+        def decide(user_id: str, candidate_policies: list[ConditionalAccessPolicy]) -> dict[str, Any]:
+            return evaluate_user_access(
                 user_id=user_id,
-                policies=merged_policies,
-                group_map=group_map,
-                role_map=role_map,
+                applicable_policies=get_applicable_policies(
+                    user_id, candidate_policies, group_map, role_map, guest_ids=guest_ids
+                ),
             )
-            decisions.append(
-                evaluate_user_access(
-                    user_id=user_id,
-                    applicable_policies=applicable_policies,
-                )
-            )
+
+        decisions: list[dict[str, Any]] = [decide(user_id, merged_policies) for user_id in users]
+        # Users whose access the proposed change makes stricter than it is today. Today
+        # includes ``baseline_floor`` (e.g. MFA_REQUIRED for everyone under security defaults).
+        floor_rank = _RESULT_RANK.get(baseline_floor or "ALLOW", 0)
+        newly_affected_users = sum(
+            1
+            for decision in decisions
+            if _RESULT_RANK[decision["result"]]
+            > max(_RESULT_RANK[decide(decision["user_id"], baseline_policies)["result"]], floor_rank)
+        )
 
         blocked_user_ids = [decision["user_id"] for decision in decisions if decision["result"] == "BLOCKED"]
         mfa_required_user_ids = [decision["user_id"] for decision in decisions if decision["result"] == "MFA_REQUIRED"]
@@ -88,6 +98,7 @@ class SimulationEngine:
             "unaffected_users": len(unaffected_user_ids),
             "impacted_users": len(impacted_user_ids),
             "impacted_admins": impacted_admins,
+            "newly_affected_users": newly_affected_users,
             "conflicts": conflicts,
             "impact": impact,
         }
