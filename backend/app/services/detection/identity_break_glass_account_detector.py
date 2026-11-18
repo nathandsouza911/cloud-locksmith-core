@@ -3,12 +3,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 
 from app.services.ca_mfa_evaluator import is_mfa_policy
-from app.services.ca_user_coverage import users_covered_by_policy
-from app.services.graph_ca_service import build_ca_group_member_map
 from app.services.graph_client import graph_get_all
-from app.services.graph_conditional_access import list_conditional_access_policies
-from app.services.graph_directory_roles_service import fetch_directory_roles
-from app.services.graph_role_members_service import fetch_role_members
+from app.simulation.policy_evaluator import match_policy
+from app.simulation.policy_parser import PolicyParser
+from app.simulation.tenant_reader import read_tenant_identity
 
 
 CONTROL_ID = "IDENTITY_BREAK_GLASS_ACCOUNT"
@@ -76,20 +74,14 @@ def _user_is_targeted_by_policy(
     *,
     policy: dict,
     user_id: str,
-    all_user_ids: set[str],
-    is_global_admin: bool,
-    group_member_map: dict[str, set[str]] | None = None,
+    group_map: Mapping[str, Iterable[str]],
+    role_map: Mapping[str, Iterable[str]],
+    guest_ids: frozenset[str],
 ) -> bool:
-    covered_users = users_covered_by_policy(policy, all_user_ids, group_member_map)
-    if user_id in covered_users:
-        return True
-
-    users = policy.get("conditions", {}).get("users", {})
-    include_roles = users.get("includeRoles") or []
-    exclude_users = set(users.get("excludeUsers") or [])
-    if is_global_admin and GLOBAL_ADMIN_ROLE_TEMPLATE_ID in include_roles and user_id not in exclude_users:
-        return True
-    return False
+    """Graph assignment semantics via the shared matcher: included, and not excluded
+    directly, by group (nested members), by role or as a guest."""
+    match = match_policy(user_id, PolicyParser().parse(policy), group_map, role_map, guest_ids)
+    return match.included and match.excluded_by is None
 
 
 def _candidate_summary(
@@ -129,10 +121,14 @@ def evaluate_break_glass_accounts(
     users: list[dict],
     global_admin_user_ids: set[str],
     conditional_access_policies: list[dict],
-    group_member_map: dict[str, set[str]] | None = None,
+    group_member_map: Mapping[str, Iterable[str]] | None = None,
+    role_member_map: Mapping[str, Iterable[str]] | None = None,
+    guest_ids: frozenset[str] = frozenset(),
 ) -> dict:
     candidate_accounts = [user for user in users if has_break_glass_marker(user)]
-    all_user_ids = {user_id for user in users for user_id in [user.get("id")] if isinstance(user_id, str) and user_id}
+    group_map = {gid: list(members) for gid, members in (group_member_map or {}).items()}
+    role_map = {rid: list(members) for rid, members in (role_member_map or {}).items()}
+    role_map.setdefault(GLOBAL_ADMIN_ROLE_TEMPLATE_ID, sorted(global_admin_user_ids))
     properly_configured_accounts: list[dict] = []
     misconfigured_accounts: list[dict] = []
 
@@ -151,9 +147,9 @@ def evaluate_break_glass_accounts(
             if not _user_is_targeted_by_policy(
                 policy=policy,
                 user_id=user_id,
-                all_user_ids=all_user_ids,
-                is_global_admin=is_global_admin,
-                group_member_map=group_member_map,
+                group_map=group_map,
+                role_map=role_map,
+                guest_ids=guest_ids,
             ):
                 continue
 
@@ -219,30 +215,15 @@ async def detect_break_glass_accounts(*, db, tenant) -> dict:
             "onPremisesSyncEnabled,onPremisesImmutableId,onPremisesExtensionAttributes"
         ),
     )
-    directory_roles = await fetch_directory_roles(db, tenant)
-    global_admin_user_ids: set[str] = set()
-
-    for role in directory_roles:
-        if role.get("displayName") != GLOBAL_ADMINISTRATOR:
-            continue
-        role_id = role.get("id")
-        if not isinstance(role_id, str) or not role_id:
-            continue
-        members = await fetch_role_members(db, tenant, role_id)
-        global_admin_user_ids.update(
-            member.get("id")
-            for member in members
-            if isinstance(member, dict)
-            and member.get("@odata.type") in (None, "#microsoft.graph.user")
-            and isinstance(member.get("id"), str)
-            and member.get("id")
-        )
-
-    conditional_access_policies = await list_conditional_access_policies(db, tenant)
-    group_member_map = await build_ca_group_member_map(db, tenant, conditional_access_policies)
+    # Policies, nested group members and role holders, read fail-closed: any Graph
+    # failure raises, so the check never runs on partial data.
+    identity = await read_tenant_identity(db, tenant)
+    roles = identity.role_map()
     return evaluate_break_glass_accounts(
         users=users,
-        global_admin_user_ids=global_admin_user_ids,
-        conditional_access_policies=conditional_access_policies,
-        group_member_map=group_member_map,
+        global_admin_user_ids=set(roles.get(GLOBAL_ADMIN_ROLE_TEMPLATE_ID, [])),
+        conditional_access_policies=identity.policies,
+        group_member_map=identity.group_map(),
+        role_member_map=roles,
+        guest_ids=identity.guest_ids(),
     )

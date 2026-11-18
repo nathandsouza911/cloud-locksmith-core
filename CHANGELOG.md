@@ -1,5 +1,80 @@
 # Changelog
 
+## Unreleased
+
+* **CA Coverage** (new page under Clients, `GET /api/v1/ca-coverage`, CSV export): for
+  every user, whether an enforced Conditional Access policy requires MFA on every
+  sign-in, blocks legacy authentication (both `exchangeActiveSync` and `other`), and,
+  for privileged-role holders, requires admin MFA. Each gap names the policy and the
+  reason: excluded directly, by group or by role, as a guest; report-only; turned off;
+  only some applications; only under conditions (locations, platforms, risk, device
+  filter); another control allowed instead of MFA. It reads policies, users, transitive
+  group members and role holders with the existing `Policy.Read.All` and
+  `Directory.Read.All` permissions, stops with an error on any failed read rather than
+  report from partial data, and lists what it does not evaluate. The demo shows it on
+  recorded fictional policies.
+* Fixed: a Conditional Access policy that includes no users, groups or roles was treated
+  as covering everyone; in Microsoft Graph it covers no one.
+* **Simulate Fix** is now computed on the server for the signed-in tenant. It took the
+  tenant's users and roles from the browser, without the tenant's existing policies or
+  group members, with roles matched by name rather than role template ID, and with a
+  proposed policy that differed from the one Apply sends. The request is now
+  `{"control_id": ...}` only (other fields are refused); the result adds
+  `newly_affected_users` (users whose access the fix makes stricter; with security defaults
+  on, every user already counts as required to use MFA) and `security_defaults_enabled`,
+  with a warning that Conditional Access policies are not enforced while security
+  defaults stay on.
+* **Legacy authentication check (`CA_LEGACY_AUTH_BLOCK`) no longer passes falsely.** It
+  passed when only one of the two legacy client types (Exchange ActiveSync, other clients)
+  was blocked, when the blocking policy targeted only some users, and when a policy had no
+  grant controls. Now both types must be blocked for all users and all cloud apps (by one
+  policy or two); break-glass exclusions are allowed. The finding lists any type still
+  unblocked. A tenant with security defaults enabled passes, since security defaults
+  block legacy authentication (as the MFA checks already allowed). Tenants that passed before may now fail: that failure is real.
+* **A policy with no grant controls is no longer counted as a block.** Graph returns no
+  grant controls for policies that set only session controls, and those allow sign-in.
+  This affected the device code flow, authentication transfer and high-risk sign-in
+  checks as well. Policies created by Apply always send an explicit block and still pass.
+* **The HTTP access log no longer records sign-in secrets.** uvicorn logged every request
+  path with its query string, so each Microsoft sign-in callback wrote its authorization
+  code, `state` and `session_state` to the log, in development and in the production
+  image. Those values, and `id_token`, `access_token`, `refresh_token`, `client_secret`
+  and `code_verifier`, are now replaced with `[REDACTED]`; other parameters are kept.
+  Authorization codes are single-use and short-lived, but logs from earlier versions
+  still contain them: delete or restrict those logs if others can read them.
+* **Scans no longer copy directory data into the logs.** For every user without an admin
+  role, the overprivileged-admin check logged the user's full Graph `/memberOf` response:
+  group names and descriptions, mail and proxy addresses, and security identifiers. It
+  now logs the user ID and how many objects of each type were returned. Logs from earlier
+  versions still contain that data: delete or restrict them if others can read them.
+* **A rolled-back fix no longer leaves its state on the finding.** Scans merge new
+  evidence into the stored evidence so that an approval in progress survives a rescan,
+  but rollback and approval expiry did not remove the fix's own fields. After a
+  rollback the finding kept "report-only policy applied", the last failure label
+  ("Execution failed") and the approved scope indefinitely. Rollback now removes the
+  approval, failure and report-only fields; approval expiry removes the approved scope
+  (and still records when it expired). Findings rolled back before this release keep
+  the old fields until their next fix or rollback.
+
+* **Per-user MFA findings no longer report uncovered users as covered.** "User without
+  MFA" and "Admin without MFA" passed every user as soon as any enabled MFA policy
+  included all users, even users that policy excluded (directly, by group or by role) and
+  policies limited to some apps or conditions. Without such a policy, group and role
+  exclusions were ignored, nested groups were not read, and a group that could not be
+  read was treated as empty. Both findings now use the CA Coverage engine, so the scan
+  and the page give the same answer, and each finding lists the reasons (for example
+  "Excluded from 'MFA all' by group 'CA exclusions'"). If any read fails, the result is
+  Unknown, never a pass. The break-glass check uses the same matcher, so an account
+  excluded by group or role is no longer reported as covered by MFA, and a failed read
+  records no break-glass result instead of stopping the tenant scan. Expect new failures
+  on tenants with exclusions or app-limited policies: they are real.
+
+* **Device code flow, authentication transfer, high-risk sign-in and risk-based MFA
+  checks require a policy for all users.** A blocking (or MFA) policy that targeted only
+  some users or groups passed the tenant-level check, leaving everyone else uncovered.
+  Exclusions such as break-glass accounts are still allowed. Policies created by Apply
+  include all users and still pass.
+
 ## 0.1.2 (2026-11-15)
 
 * The API (`GET /` and the OpenAPI page) and the dashboard package now report the release

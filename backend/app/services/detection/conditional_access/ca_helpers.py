@@ -12,6 +12,29 @@ def is_mfa_grant(grant_controls: dict | None) -> bool:
     return False
 
 
+def is_block_grant(grant_controls: dict | None) -> bool:
+    """
+    Returns True only if the grant controls explicitly block access.
+    Graph returns grantControls null for policies with session controls only;
+    that grants access, so it is NOT a block.
+    """
+    if not grant_controls:
+        return False
+    return "block" in (grant_controls.get("builtInControls") or [])
+
+
+def targets_all_users(policy: dict) -> bool:
+    """Returns True if the policy includes all users (exclusions such as break-glass allowed)."""
+    users = (policy.get("conditions") or {}).get("users") or {}
+    return "All" in (users.get("includeUsers") or [])
+
+
+def targets_all_apps(policy: dict) -> bool:
+    """Returns True if the policy includes all cloud apps (app exclusions allowed)."""
+    apps = (policy.get("conditions") or {}).get("applications") or {}
+    return "All" in (apps.get("includeApplications") or [])
+
+
 def is_policy_enabled(policy: dict) -> bool:
     return policy.get("state") == "enabled"
 

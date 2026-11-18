@@ -138,6 +138,8 @@ export const useRemediationTimeline = (limit = 100, _tenantId?: string | null) =
 export const useRemediationHistory = () =>
   useQuery(() => ep.getRemediationHistory(), [], { requireTenant: true });
 
+export const useCaCoverage = () => useQuery(() => ep.getCaCoverage(), [], { requireTenant: true });
+
 export const usePostureTrend = (tenantId?: string | null) =>
   useQuery(
     () => {
@@ -221,23 +223,16 @@ export function useSimulation() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ep.SimulationRunResponse | null>(null);
 
-  const runSimulation = useCallback(
-    async (payload: {
-      tenant_snapshot: Record<string, unknown>;
-      proposed_change: Record<string, unknown>;
-      role_mapping: Record<string, string[]>;
-    }) => {
-      setLoading(true);
-      try {
-        const response = await ep.runSimulation(payload);
-        setResult(response);
-        return response;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  const runSimulation = useCallback(async (payload: { control_id: ep.SimulationControlId }) => {
+    setLoading(true);
+    try {
+      const response = await ep.runSimulation(payload);
+      setResult(response);
+      return response;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   return {
     runSimulation,

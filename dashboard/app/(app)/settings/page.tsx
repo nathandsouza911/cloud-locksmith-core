@@ -6,8 +6,7 @@ import { RefreshCw, Trash2 } from "lucide-react";
 import { Card, PageHeader, Button, SimulationPanel } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 import { startMicrosoftOAuth } from "@/lib/auth";
-import { useSimulation, useUsers } from "@/lib/api/hooks";
-import { requireTenantIdentitySnapshot } from "@/lib/simulation";
+import { useSimulation } from "@/lib/api/hooks";
 import { deleteTenant } from "@/lib/api/endpoints";
 import BreakGlassAccountsCard from "@/components/settings/BreakGlassAccountsCard";
 
@@ -25,7 +24,6 @@ export default function SettingsPage() {
   const [showSimulationPanel, setShowSimulationPanel] = useState(false);
 
   const { runSimulation, loading: simulationLoading, result: simulationResult } = useSimulation();
-  const usersQuery = useUsers(tenantId);
 
   const onboardingStatus = searchParams.get("status");
   const onboardingReason = searchParams.get("reason");
@@ -52,18 +50,7 @@ export default function SettingsPage() {
     setSimulationError(null);
     setShowSimulationPanel(true);
     try {
-      const tenantSnapshot = requireTenantIdentitySnapshot(usersQuery.data, usersQuery.error);
-      await runSimulation({
-        tenant_snapshot: { ...tenantSnapshot },
-        proposed_change: {
-          id: "settings-simulation-policy",
-          control_id: "CA_MFA_ALL_USERS",
-          conditions: { users: { includeUsers: ["All"] } },
-          grantControls: { builtInControls: ["mfa"] },
-          state: "enabled",
-        },
-        role_mapping: tenantSnapshot.roles,
-      });
+      await runSimulation({ control_id: "CA_MFA_ALL_USERS" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Simulation failed";
       setSimulationError(message);
@@ -123,7 +110,7 @@ export default function SettingsPage() {
             variant="secondary"
             size="sm"
             onClick={() => void handleSimulateFix()}
-            disabled={simulationLoading || usersQuery.loading}
+            disabled={simulationLoading}
           >
             {simulationLoading ? "Simulating..." : "Simulate Fix"}
           </Button>

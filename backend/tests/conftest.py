@@ -153,7 +153,7 @@ def mock_ca_policy_device_code_block():
             "applications": {"includeApplications": ["All"]},
             "authenticationFlows": {"transferMethods": ["deviceCodeFlow"]},
         },
-        "grantControls": None,
+        "grantControls": {"operator": "OR", "builtInControls": ["block"]},
     }
 
 
