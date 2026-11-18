@@ -24,6 +24,37 @@
   on, every user already counts as required to use MFA) and `security_defaults_enabled`,
   with a warning that Conditional Access policies are not enforced while security
   defaults stay on.
+* **Legacy authentication check (`CA_LEGACY_AUTH_BLOCK`) no longer passes falsely.** It
+  passed when only one of the two legacy client types (Exchange ActiveSync, other clients)
+  was blocked, when the blocking policy targeted only some users, and when a policy had no
+  grant controls. Now both types must be blocked for all users and all cloud apps (by one
+  policy or two); break-glass exclusions are allowed. The finding lists any type still
+  unblocked. A tenant with security defaults enabled passes, since security defaults
+  block legacy authentication (as the MFA checks already allowed). Tenants that passed before may now fail: that failure is real.
+* **A policy with no grant controls is no longer counted as a block.** Graph returns no
+  grant controls for policies that set only session controls, and those allow sign-in.
+  This affected the device code flow, authentication transfer and high-risk sign-in
+  checks as well. Policies created by Apply always send an explicit block and still pass.
+* **The HTTP access log no longer records sign-in secrets.** uvicorn logged every request
+  path with its query string, so each Microsoft sign-in callback wrote its authorization
+  code, `state` and `session_state` to the log, in development and in the production
+  image. Those values, and `id_token`, `access_token`, `refresh_token`, `client_secret`
+  and `code_verifier`, are now replaced with `[REDACTED]`; other parameters are kept.
+  Authorization codes are single-use and short-lived, but logs from earlier versions
+  still contain them: delete or restrict those logs if others can read them.
+* **Scans no longer copy directory data into the logs.** For every user without an admin
+  role, the overprivileged-admin check logged the user's full Graph `/memberOf` response:
+  group names and descriptions, mail and proxy addresses, and security identifiers. It
+  now logs the user ID and how many objects of each type were returned. Logs from earlier
+  versions still contain that data: delete or restrict them if others can read them.
+* **A rolled-back fix no longer leaves its state on the finding.** Scans merge new
+  evidence into the stored evidence so that an approval in progress survives a rescan,
+  but rollback and approval expiry did not remove the fix's own fields. After a
+  rollback the finding kept "report-only policy applied", the last failure label
+  ("Execution failed") and the approved scope indefinitely. Rollback now removes the
+  approval, failure and report-only fields; approval expiry removes the approved scope
+  (and still records when it expired). Findings rolled back before this release keep
+  the old fields until their next fix or rollback.
 
 * **Per-user MFA findings no longer report uncovered users as covered.** "User without
   MFA" and "Admin without MFA" passed every user as soon as any enabled MFA policy

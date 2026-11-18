@@ -34,6 +34,15 @@ def _normalized_role(role_id: str, display_name: str) -> dict[str, str]:
     }
 
 
+def _member_type_counts(values: list) -> str:
+    counts: dict[str, int] = {}
+    for obj in values:
+        odata_type = obj.get("@odata.type") if isinstance(obj, dict) else None
+        name = odata_type.rsplit(".", 1)[-1] if isinstance(odata_type, str) and odata_type else "unknown"
+        counts[name] = counts.get(name, 0) + 1
+    return ",".join(f"{name}={count}" for name, count in sorted(counts.items())) or "none"
+
+
 def extract_directory_roles(
     raw_memberof: dict | None,
     *,
@@ -60,13 +69,14 @@ def extract_directory_roles(
         current_roles.append(_normalized_role(role_id, display_name))
 
     if not current_roles:
-        logger.warning(
-            "no_roles_returned %s",
-            {
-                "event": "NO_ROLES_RETURNED",
-                "user_id": user_id,
-                "raw_memberOf": raw_memberof,
-            },
+        # Counts only: the raw /memberOf response holds directory data (group names, mail
+        # and proxy addresses, SIDs) that must not be copied into the logs. DEBUG: no admin
+        # role is the normal case, and the scan checks every user.
+        logger.debug(
+            "no_roles_returned user_id=%s member_of_count=%d types=%s",
+            user_id,
+            len(values),
+            _member_type_counts(values),
         )
 
     available_roles = [role for role in current_roles if is_role_removable(role.get("displayName"))]
