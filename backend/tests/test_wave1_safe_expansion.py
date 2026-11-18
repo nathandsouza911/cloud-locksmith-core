@@ -161,23 +161,40 @@ class TestAppSecretExpiryDetector:
             "keyCredentials": [],
         }
 
+    _TENANT = "11111111-2222-3333-4444-555555555555"
+    _HINT = (
+        "This is Cloud Locksmith's own app registration. "
+        "In deploy/, run: docker compose run --rm setup --rotate-secret"
+    )
+
     def test_own_app_secret_gets_rotate_hint(self, monkeypatch):
         from app.config import settings
         from app.services.detection.app_secret_expiry_detector import evaluate_app_secret_expiry
 
         app = self._app("own", days_until_expiry=10)
+        monkeypatch.setattr(settings, "MICROSOFT_TENANT", self._TENANT)
         monkeypatch.setattr(settings, "MICROSOFT_CLIENT_ID", app["appId"].upper())
         evidence = evaluate_app_secret_expiry(app)["evidence"]
         assert evidence["is_this_instance"] is True
-        assert evidence["remediation_hint"] == (
-            "This is Cloud Locksmith's own app registration. "
-            "In deploy/, run: docker compose run --rm setup --rotate-secret"
-        )
+        assert evidence["remediation_hint"] == self._HINT
+
+    def test_own_app_gets_no_deploy_hint_outside_single_tenant_install(self, monkeypatch):
+        """Manual and MSP installs have no deploy/ setup command to run."""
+        from app.config import settings
+        from app.services.detection.app_secret_expiry_detector import evaluate_app_secret_expiry
+
+        app = self._app("own", days_until_expiry=10)
+        monkeypatch.setattr(settings, "MICROSOFT_TENANT", "organizations")
+        monkeypatch.setattr(settings, "MICROSOFT_CLIENT_ID", app["appId"])
+        evidence = evaluate_app_secret_expiry(app)["evidence"]
+        assert evidence["is_this_instance"] is False
+        assert "remediation_hint" not in evidence
 
     def test_other_app_has_no_rotate_hint(self, monkeypatch):
         from app.config import settings
         from app.services.detection.app_secret_expiry_detector import evaluate_app_secret_expiry
 
+        monkeypatch.setattr(settings, "MICROSOFT_TENANT", self._TENANT)
         monkeypatch.setattr(settings, "MICROSOFT_CLIENT_ID", "some-other-client")
         evidence = evaluate_app_secret_expiry(self._app("other", days_until_expiry=10))["evidence"]
         assert evidence["is_this_instance"] is False
@@ -187,10 +204,72 @@ class TestAppSecretExpiryDetector:
         from app.config import settings
         from app.services.detection.app_secret_expiry_detector import evaluate_app_secret_expiry
 
+        monkeypatch.setattr(settings, "MICROSOFT_TENANT", self._TENANT)
         monkeypatch.setattr(settings, "MICROSOFT_CLIENT_ID", "")
         app = self._app("blank", days_until_expiry=10)
         app["appId"] = ""
         assert evaluate_app_secret_expiry(app)["evidence"]["is_this_instance"] is False
+
+    def _tenant_finding(self, apps):
+        from app.services.detection.app_secret_expiry_detector import (
+            build_app_secret_control_evidence,
+            evaluate_all_app_secret_expiry,
+        )
+
+        evidence = build_app_secret_control_evidence(evaluate_all_app_secret_expiry(apps), total_app_count=len(apps))
+        return SimpleNamespace(
+            id=1,
+            tenant_id="t1",
+            control_id="IDENTITY_APP_SECRET_EXPIRING_SOON",
+            resource_type="TENANT",
+            resource_id="t1",
+            severity="HIGH",
+            evidence=evidence,
+        )
+
+    def test_tenant_finding_surfaces_own_secret_hint_as_a_fact(self, monkeypatch):
+        """The hint must reach the detail panel, which only shows top-level scalars."""
+        from app.config import settings
+        from app.services.workflows.identity_hygiene.workflow import IDENTITY_HYGIENE_PROJECTOR
+
+        own = self._app("own", days_until_expiry=10)
+        monkeypatch.setattr(settings, "MICROSOFT_TENANT", self._TENANT)
+        monkeypatch.setattr(settings, "MICROSOFT_CLIENT_ID", own["appId"])
+        finding = self._tenant_finding([own, self._app("other", days_until_expiry=5)])
+        assert finding.evidence["includes_this_instance"] is True
+        assert finding.evidence["affected_app_count"] == 2
+
+        [resource] = IDENTITY_HYGIENE_PROJECTOR.project([finding])
+        facts = {fact.label: fact.value for fact in resource.facts}
+        assert facts["Remediation hint"] == self._HINT
+        assert facts["Includes this instance"] is True
+
+    def test_tenant_finding_has_no_hint_when_no_app_is_this_instance(self, monkeypatch):
+        from app.config import settings
+        from app.services.workflows.identity_hygiene.workflow import IDENTITY_HYGIENE_PROJECTOR
+
+        monkeypatch.setattr(settings, "MICROSOFT_TENANT", self._TENANT)
+        monkeypatch.setattr(settings, "MICROSOFT_CLIENT_ID", "some-other-client")
+        finding = self._tenant_finding([self._app("other", days_until_expiry=5)])
+        assert "remediation_hint" not in finding.evidence
+        assert "includes_this_instance" not in finding.evidence
+
+        [resource] = IDENTITY_HYGIENE_PROJECTOR.project([finding])
+        labels = {fact.label for fact in resource.facts}
+        assert "Remediation hint" not in labels
+        assert "Includes this instance" not in labels
+
+    def test_tenant_finding_without_affected_apps_passes(self):
+        from app.services.detection.app_secret_expiry_detector import build_app_secret_control_evidence
+
+        evidence = build_app_secret_control_evidence([], total_app_count=3)
+        assert evidence == {
+            "affected_app_count": 0,
+            "total_app_count": 3,
+            "expired_app_count": 0,
+            "worst_severity": "HIGH",
+            "affected_apps": [],
+        }
 
     def test_expiring_within_threshold_fails(self):
         from app.services.detection.app_secret_expiry_detector import evaluate_app_secret_expiry
