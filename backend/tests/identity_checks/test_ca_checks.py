@@ -114,7 +114,7 @@ def test_mfa_admins_fail_when_some_roles_missing():
     policy = {
         "id": "policy-partial-admins",
         "state": "enabled",
-        "conditions": {"users": {"includeRoles": partial_roles}},
+        "conditions": {"users": {"includeRoles": partial_roles}, "applications": {"includeApplications": ["All"]}},
         "grantControls": {"builtInControls": ["mfa"]},
     }
     ctx = _ctx([policy])
@@ -581,3 +581,19 @@ def test_mfa_all_users_fail_when_policy_covers_only_some_apps():
     all_apps_with_exclusion = _scoped("p", {"includeUsers": ["All"]}, ["mfa"])
     all_apps_with_exclusion["conditions"]["applications"]["excludeApplications"] = ["some-app-id"]
     assert _run(detect_ca_mfa_all_users, [all_apps_with_exclusion]) is True
+
+
+def test_mfa_admins_fail_when_policy_covers_only_some_apps():
+    one_app = {"includeApplications": ["00000003-0000-0ff1-ce00-000000000000"]}
+
+    roles_one_app = _scoped("p", {"includeRoles": sorted(PRIVILEGED_ROLE_IDS)}, ["mfa"])
+    roles_one_app["conditions"]["applications"] = one_app
+    assert _run(detect_ca_mfa_admins, [roles_one_app]) is False
+
+    all_users_one_app = _scoped("p", {"includeUsers": ["All"]}, ["mfa"])
+    all_users_one_app["conditions"]["applications"] = one_app
+    assert _run(detect_ca_mfa_admins, [all_users_one_app]) is False
+
+    roles_all_apps = _scoped("p", {"includeRoles": sorted(PRIVILEGED_ROLE_IDS)}, ["mfa"])
+    roles_all_apps["conditions"]["applications"]["excludeApplications"] = ["some-app-id"]
+    assert _run(detect_ca_mfa_admins, [roles_all_apps]) is True
