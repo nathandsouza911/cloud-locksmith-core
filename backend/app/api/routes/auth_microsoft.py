@@ -84,15 +84,18 @@ def _normalize_tenant_hint(tenant_id: str | None) -> str | None:
     return normalized or None
 
 
+def _resolve_microsoft_authority_tenant(tenant_id: str | None) -> str:
+    # A configured single tenant always wins over the client-supplied hint.
+    return settings.single_tenant_id or _normalize_tenant_hint(tenant_id) or "organizations"
+
+
 def _build_microsoft_authorize_url(tenant_id: str | None) -> str:
-    resolved_tenant = _normalize_tenant_hint(tenant_id) or "organizations"
+    resolved_tenant = _resolve_microsoft_authority_tenant(tenant_id)
     return f"https://login.microsoftonline.com/{resolved_tenant}/oauth2/v2.0/authorize"
 
 
 def _build_microsoft_token_url(tenant_id: str | None) -> str:
-    resolved_tenant = _normalize_tenant_hint(tenant_id)
-    if resolved_tenant is None:
-        resolved_tenant = "organizations"
+    resolved_tenant = _resolve_microsoft_authority_tenant(tenant_id)
     return f"https://login.microsoftonline.com/{resolved_tenant}/oauth2/v2.0/token"
 
 
@@ -631,6 +634,16 @@ def start_microsoft_oauth(
         initiating_session_identifier = str(auth_payload.get("jti") or "").strip() or None
 
     normalized_tenant_id = _normalize_tenant_hint(tenant_id)
+    single_tenant_id = settings.single_tenant_id
+    if single_tenant_id and normalized_tenant_id and normalized_tenant_id.lower() != single_tenant_id:
+        # Refused before any OAuth state is written.
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "TENANT_NOT_ALLOWED",
+                "message": "This install only signs in to its configured Microsoft tenant.",
+            },
+        )
 
     state = _encode_oauth_state(
         db,
@@ -806,6 +819,16 @@ async def _microsoft_oauth_callback_impl(
     azure_tenant_id = stored_token.get("claims", {}).get("tid")
     if not azure_tenant_id:
         raise HTTPException(status_code=400, detail="Unable to determine tenant ID from access token")
+    single_tenant_id = settings.single_tenant_id
+    if single_tenant_id and str(azure_tenant_id).strip().lower() != single_tenant_id:
+        # The token's tid is the source of truth: refuse a foreign tenant before
+        # any id_token verification, Graph call or Tenant/TenantOAuth write.
+        logger.warning("microsoft_oauth_tenant_not_allowed")
+        raise _CallbackDenied(
+            status_code=403,
+            connect_error_code="tenant_not_allowed",
+            detail="This install only signs in to its configured Microsoft tenant.",
+        )
     # The demo tenant ID is reserved: a real sign-in must never create or attach it.
     from app.demo import DEMO_TENANT_ID
 

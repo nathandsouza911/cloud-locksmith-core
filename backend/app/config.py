@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from urllib.parse import urlsplit
 
 from pydantic import AnyUrl, model_validator
@@ -7,6 +8,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 logger = logging.getLogger(__name__)
+
+
+_TENANT_GUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
 def _is_loopback_http_url(url: str) -> bool:
@@ -202,6 +206,16 @@ class Settings(BaseSettings):
                 ]
             )
         return defaults
+
+    @property
+    def single_tenant_id(self) -> str | None:
+        """The one Entra tenant sign-in is fixed to, or None for multi-tenant mode.
+
+        Only a tenant GUID counts; `common`, `organizations`, `consumers`, a
+        domain name or an empty value leave sign-in multi-tenant.
+        """
+        tenant = self.MICROSOFT_TENANT.strip().lower()
+        return tenant if _TENANT_GUID_PATTERN.fullmatch(tenant) else None
 
     @property
     def microsoft_login_base_url(self) -> str:
