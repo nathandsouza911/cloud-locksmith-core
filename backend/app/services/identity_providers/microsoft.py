@@ -12,10 +12,9 @@ from app.services.graph_client import (
     graph_delete,
     graph_get,
     graph_get_all,
-    graph_get_app,
     graph_patch,
     graph_post,
-    set_user_account_enabled_with_app_token,
+    set_user_account_enabled_for_tenant,
     validate_tenant_graph_permissions,
 )
 from app.services.identity_providers.base import (
@@ -260,13 +259,12 @@ class MicrosoftIdentityProviderAdapter(IdentityProviderAdapter):
             )
             .one_or_none()
         )
-        return await set_user_account_enabled_with_app_token(
+        return await set_user_account_enabled_for_tenant(
+            tenant=self.tenant,
             user_id=user_id,
             enabled=validated.accountEnabled,
-            tenant_id=self.tenant.id,
             db=self.db,
             user_email=getattr(user, "email", None),
-            tenant=self.tenant,
         )
 
     async def add_directory_role_member(self, role_id: str, user_id: str) -> dict[str, Any]:
@@ -329,16 +327,8 @@ class MicrosoftIdentityProviderAdapter(IdentityProviderAdapter):
     async def list_oauth2_permission_grants(self) -> list[dict[str, Any]]:
         return await graph_get_all(self.db, self.tenant, "/oauth2PermissionGrants")
 
-    async def get_user_account_state(
-        self,
-        user_id: str,
-        *,
-        use_application_token: bool = False,
-    ) -> dict[str, Any]:
-        path = f"/users/{user_id}?$select=id,mail,userPrincipalName,accountEnabled"
-        if use_application_token:
-            return await graph_get_app(path)
-        return await self.get(path)
+    async def get_user_account_state(self, user_id: str) -> dict[str, Any]:
+        return await self.get(f"/users/{user_id}?$select=id,mail,userPrincipalName,accountEnabled")
 
     async def remove_directory_role_member(self, role_id: str, user_id: str) -> dict[str, Any]:
         return await self.delete(f"/directoryRoles/{role_id}/members/{user_id}/$ref")

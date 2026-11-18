@@ -25,11 +25,9 @@ if it drifts. Why each scope is needed: `permissions.md`.
 
 <!-- scopes:end -->
 
-Also possible: an **app-only** token (client credentials) for the tenant set in
-`MICROSOFT_TENANT`, used to disable accounts during offboarding. It needs the application
-permissions in `REQUIRED_GRAPH_REMEDIATION_PERMISSIONS` (default
-`User.EnableDisableAccount.All`), which you grant yourself in Entra. Leave
-`MICROSOFT_TENANT` unset and grant nothing if you do not want this.
+There is no **app-only** token (client credentials). Every Graph call, including
+disabling accounts during offboarding, uses the connected tenant's own delegated token, and
+a write is refused unless that token's `tid` matches the tenant being changed.
 
 The demo (`DEMO_MODE=true`) requests no scopes and makes no outbound requests at all
 (`backend/tests/test_demo_mode.py`).

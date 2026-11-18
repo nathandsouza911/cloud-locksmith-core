@@ -6,7 +6,7 @@ from app.services.graph_client import (
     GraphBlockedError,
     get_tenant_graph_token_claims,
     graph_post,
-    set_user_account_enabled_with_app_token,
+    set_user_account_enabled_for_tenant,
     validate_required_graph_permissions,
 )
 from app.services.offboarding.offboarding_snapshot import snapshot_user_state
@@ -128,13 +128,12 @@ async def execute_offboarding(
                     "token_tid": claims.get("tid"),
                 },
             )
-            disable_result = await set_user_account_enabled_with_app_token(
+            disable_result = await set_user_account_enabled_for_tenant(
+                tenant=tenant,
                 user_id=user_id,
                 enabled=False,
-                tenant_id=tenant.id,
                 db=db,
                 user_email=snapshot.get("email") or snapshot.get("user_principal_name"),
-                tenant=tenant,
             )
             if isinstance(disable_result, dict) and disable_result.get("status") in {"blocked", "skipped"}:
                 return disable_result

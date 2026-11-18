@@ -208,8 +208,6 @@ class IdentityProviderAdapter(ABC):
     async def get_user_account_state(
         self,
         user_id: str,
-        *,
-        use_application_token: bool = False,
     ) -> dict[str, Any]:
         """Fetch the provider account state for a user."""
 

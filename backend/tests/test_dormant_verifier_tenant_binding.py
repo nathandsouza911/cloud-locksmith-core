@@ -1,10 +1,9 @@
 """M6 regression — the dormant/unused-account verifier MUST read the customer
-tenant via the delegated token, never the app-only token.
+tenant through the tenant-bound adapter.
 
-The app-only token (`get_graph_app_token`) is minted against the fixed
-publisher tenant (MICROSOFT_TENANT), so an app-token read of a customer user
-GUID hits the publisher directory, 404s, and the verifier previously rubber-
-stamped that 404 as VERIFIED_REMOVED — a fail-open verification bypass.
+A read of the wrong directory (formerly the publisher-tenant app-only token,
+now removed) 404s on the customer user GUID, and the verifier previously
+rubber-stamped that 404 as VERIFIED_REMOVED — a fail-open verification bypass.
 """
 
 import asyncio
@@ -20,8 +19,8 @@ class _FakeAdapter:
         self._account_state = account_state
         self.calls: list[dict] = []
 
-    async def get_user_account_state(self, user_id, *, use_application_token=False):
-        self.calls.append({"user_id": user_id, "use_application_token": use_application_token})
+    async def get_user_account_state(self, user_id):
+        self.calls.append({"user_id": user_id})
         if isinstance(self._account_state, Exception):
             raise self._account_state
         return self._account_state
@@ -43,10 +42,7 @@ def _run_verify(monkeypatch, account_state):
 
 def test_verifier_reads_customer_tenant_with_delegated_token(monkeypatch):
     fake, _ = _run_verify(monkeypatch, {"accountEnabled": False})
-    assert fake.calls, "verifier must query the account state"
-    assert (
-        fake.calls[0]["use_application_token"] is False
-    ), "verifier must use the delegated (tenant-scoped) token, not the publisher app token"
+    assert fake.calls == [{"user_id": "customer-user-1"}], "verifier must read the user via the tenant adapter"
 
 
 def test_verifier_does_not_rubber_stamp_a_still_enabled_account(monkeypatch):

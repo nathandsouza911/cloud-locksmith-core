@@ -23,16 +23,9 @@ async def verify_dormant_account_disabled(
     try:
         adapter = get_identity_provider_adapter(db=db, tenant=tenant)
         # Read the CUSTOMER tenant via the delegated, tenant-scoped token.
-        # The app-only token is minted against the fixed publisher tenant
-        # (MICROSOFT_TENANT); using it here read the wrong directory, 404'd on
-        # the customer user GUID, and the 404 branch below rubber-stamped the
-        # remediation as VERIFIED_REMOVED — a fail-open verification bypass.
-        # Stay consistent with the execute/rollback paths, which all read via
-        # the delegated token.
-        user = await adapter.get_user_account_state(
-            user_id,
-            use_application_token=False,
-        )
+        # A read of the wrong directory 404s on the customer user GUID, and the
+        # 404 branch below would rubber-stamp that as VERIFIED_REMOVED.
+        user = await adapter.get_user_account_state(user_id)
     except GraphAPIError as exc:
         if exc.status_code == 404:
             return {

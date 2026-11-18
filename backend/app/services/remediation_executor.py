@@ -75,7 +75,6 @@ def _ensure_executor_purity(executor, control_id: str):
         "graph_post",
         "graph_patch",
         "graph_delete",
-        "graph_get_app",
         "MicrosoftGraphClient",
         "validate_tenant_graph_permissions",
     }
