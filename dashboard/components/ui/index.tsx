@@ -298,7 +298,5 @@ export { default as ConfirmModal } from "./ConfirmModal";
 export type { ConfirmModalProps } from "./ConfirmModal";
 export { default as SimulationPanel } from "./SimulationPanel";
 export type { SimulationResult, SimulationConflict } from "./SimulationPanel";
-export { default as PolicyEditor } from "./PolicyEditor";
-export type { EditablePolicy } from "./PolicyEditor";
 export { default as RiskBadge } from "./RiskBadge";
 export { default as ConfidenceBadge } from "./ConfidenceBadge";

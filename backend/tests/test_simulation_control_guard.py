@@ -8,44 +8,17 @@ Rejected: everything else — fail closed.
 
 import pytest
 
-from app.simulation.service import SimulationService
 from app.simulation.constants import SIMULATION_ALLOWED_CONTROLS
+from app.simulation.service import check_simulation_control
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
-def _minimal_snapshot():
-    return {
-        "users": ["user-1", "user-2"],
-        "groups": {},
-        "roles": {},
-    }
-
-
-def _mfa_proposed_change(control_id: str) -> dict:
-    return {
-        "id": "sim-test-001",
-        "control_id": control_id,
-        "conditions": {
-            "users": {"includeUsers": ["All"]},
-        },
-        "grantControls": {"builtInControls": ["mfa"]},
-        "state": "enabled",
-    }
-
-
-def _run(control_id: str):
-    service = SimulationService()
-    request_data = {
-        "tenant_snapshot": _minimal_snapshot(),
-        "proposed_change": _mfa_proposed_change(control_id),
-        "role_mapping": {},
-    }
-    from app.simulation.models import SimulationRunRequest
-
-    request = SimulationRunRequest.model_validate(request_data)
-    return service.run_simulation(request=request, tenant=None)
+def _run(control_id: str) -> str:
+    # The request carries only control_id; identity data is read server-side
+    # (tests/integration/test_simulation_api.py covers the full run).
+    return check_simulation_control(control_id)
 
 
 # ── allowed controls ──────────────────────────────────────────────────────────
@@ -54,11 +27,11 @@ def _run(control_id: str):
 class TestAllowedControls:
     def test_ca_mfa_all_users_is_allowed(self):
         result = _run("CA_MFA_ALL_USERS")
-        assert result.status == "completed"
+        assert result in SIMULATION_ALLOWED_CONTROLS
 
     def test_ca_mfa_admins_is_allowed(self):
         result = _run("CA_MFA_ADMINS")
-        assert result.status == "completed"
+        assert result in SIMULATION_ALLOWED_CONTROLS
 
 
 # ── rejected controls ─────────────────────────────────────────────────────────
@@ -87,24 +60,8 @@ class TestRejectedControls:
             _run(control_id)
 
     def test_missing_control_id_is_rejected(self):
-        service = SimulationService()
-        from app.simulation.models import SimulationRunRequest
-
-        request = SimulationRunRequest.model_validate(
-            {
-                "tenant_snapshot": _minimal_snapshot(),
-                "proposed_change": {
-                    "id": "sim-no-control",
-                    "conditions": {"users": {"includeUsers": ["All"]}},
-                    "grantControls": {"builtInControls": ["mfa"]},
-                    "state": "enabled",
-                    # no control_id
-                },
-                "role_mapping": {},
-            }
-        )
         with pytest.raises(ValueError, match="control_id"):
-            service.run_simulation(request=request, tenant=None)
+            check_simulation_control(None)
 
     def test_empty_string_control_id_is_rejected(self):
         with pytest.raises(ValueError):

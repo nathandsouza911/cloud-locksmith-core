@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ShieldHalf,
   BookOpen,
   Building2,
   ChevronRight,
@@ -61,6 +62,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/tenants", label: "Clients", icon: Building2 },
       { href: "/users", label: "Users", icon: Users },
+      { href: "/ca-coverage", label: "CA Coverage", icon: ShieldHalf },
       { href: "/remediation-timeline", label: "Remediation Timeline", icon: Activity },
       { href: "/remediation-history", label: "Remediation History", icon: Activity },
     ],

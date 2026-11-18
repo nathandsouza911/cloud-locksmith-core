@@ -155,39 +155,27 @@ class TestAuthenticationStrength:
         p = self._policy(builtin=["compliantDevice"])
         assert is_mfa_policy(p) is False
 
-    # --- is_tenant_wide_mfa_policy ---
+    # --- per-user coverage (identity scan) ---
+    # The identity scan's per-user MFA result comes from the CA coverage engine; an
+    # all-users authenticationStrength policy must count as requiring MFA there too.
 
-    def test_tenant_wide_auth_strength_policy_detected(self):
-        """A tenant-wide authenticationStrength policy must be detected."""
-        from app.services.ca_mfa_evaluator import is_tenant_wide_mfa_policy
+    def _coverage_status(self, policy):
+        from app.simulation.coverage import build_coverage
+        from app.simulation.tenant_reader import TenantIdentity
 
+        policy["conditions"]["applications"] = {"includeApplications": ["All"]}
+        coverage = build_coverage(TenantIdentity(users=[{"id": "u1"}], policies=[policy]))
+        return coverage["users"][0]["mfa"]["status"]
+
+    def test_all_users_auth_strength_policy_covers_users(self):
         p = self._policy(
-            state="enabled",
-            auth_strength={"id": "00000000-0000-0000-0001-000000000002"},
-            include_users=["All"],
+            state="enabled", auth_strength={"id": "00000000-0000-0000-0001-000000000002"}, include_users=["All"]
         )
-        assert is_tenant_wide_mfa_policy(p) is True, "Tenant-wide authenticationStrength policy not detected"
+        assert self._coverage_status(p) == "covered", "authenticationStrength must count as MFA"
 
-    def test_tenant_wide_legacy_mfa_still_works(self):
-        from app.services.ca_mfa_evaluator import is_tenant_wide_mfa_policy
-
+    def test_all_users_builtin_mfa_policy_covers_users(self):
         p = self._policy(state="enabled", builtin=["mfa"], include_users=["All"])
-        assert is_tenant_wide_mfa_policy(p) is True
-
-    def test_evaluate_tenant_wide_detects_auth_strength(self):
-        """evaluate_tenant_wide_ca_mfa must count authenticationStrength policies."""
-        from app.services.ca_mfa_evaluator import evaluate_tenant_wide_ca_mfa
-
-        policies = [
-            self._policy(
-                state="enabled",
-                auth_strength={"id": "abc"},
-                include_users=["All"],
-            )
-        ]
-        enforced, ids = evaluate_tenant_wide_ca_mfa(policies)
-        assert enforced is True, "evaluate_tenant_wide must detect authenticationStrength"
-        assert len(ids) == 1
+        assert self._coverage_status(p) == "covered"
 
 
 # ===========================================================================

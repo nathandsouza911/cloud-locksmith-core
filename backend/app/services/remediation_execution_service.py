@@ -31,6 +31,7 @@ from app.services.remediation.tenant_execution_lock import (
     release_tenant_execution_lock,
 )
 from app.services.remediation.lifecycle import (
+    APPROVAL_EVIDENCE_KEYS,
     BlockReason,
     TransitionEvent,
     current_exposure_status,
@@ -252,7 +253,7 @@ async def execute_approved_remediation(
             # Reset to PENDING so the approval workflow must restart.
             compliance.remediation_status = "PENDING"
             compliance.decision_status = "PENDING"
-            ev = dict(compliance.evidence or {})
+            ev = {k: v for k, v in (compliance.evidence or {}).items() if k not in APPROVAL_EVIDENCE_KEYS}
             ev["approval_expired_at"] = utc_now().isoformat()
             compliance.evidence = ev
             db.commit()
@@ -367,8 +368,8 @@ async def execute_approved_remediation(
                 compliance.decision_status = "PENDING"
                 ev = dict(compliance.evidence or {})
                 ev["approval_invalidated_at"] = utc_now().isoformat()
-                ev.pop("approved_scope_hash", None)
-                ev.pop("approved_roles", None)
+                for key in APPROVAL_EVIDENCE_KEYS:
+                    ev.pop(key, None)
                 compliance.evidence = ev
                 db.commit()
             raise ValueError(str(exc)) from exc
