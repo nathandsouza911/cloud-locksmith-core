@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import SettingsPage from "../page";
 
 // ── External mocks ────────────────────────────────────────────────────────────
@@ -61,18 +61,13 @@ jest.mock("@/lib/auth", () => ({
 
 jest.mock("@/lib/api/hooks", () => ({
   useSimulation: () => ({
-    runSimulation: jest.fn(),
+    runSimulation: mockRunSimulation,
     loading: false,
     result: null,
   }),
-  useUsers: () => mockUsersState,
 }));
 
-let mockUsersState: { data: unknown[] | null; loading: boolean; error: string | null } = {
-  data: [],
-  loading: false,
-  error: null,
-};
+const mockRunSimulation = jest.fn();
 
 jest.mock("@/lib/api/endpoints", () => ({
   deleteTenant: jest.fn(),
@@ -107,7 +102,7 @@ function authWith(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   mockUseAuth.mockReturnValue(authWith());
-  mockUsersState = { data: [], loading: false, error: null };
+  mockRunSimulation.mockReset();
 });
 
 // ── Tests: removed elements (RED on current, GREEN on new) ───────────────────
@@ -192,15 +187,23 @@ describe("kept elements — always visible", () => {
     expect(screen.getByRole("button", { name: /simulate fix/i })).toBeInTheDocument();
   });
 
-  test("Simulate Fix shows why users are unavailable instead of 'still loading'", async () => {
+  test("Simulate Fix sends only the control; the server reads the tenant", async () => {
+    mockRunSimulation.mockResolvedValue({});
+    renderSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: /simulate fix/i }));
+
+    await waitFor(() => expect(mockRunSimulation).toHaveBeenCalledWith({ control_id: "CA_MFA_ALL_USERS" }));
+  });
+
+  test("Simulate Fix shows the server's reason when the tenant cannot be read", async () => {
     const reason = "This needs a full connect to Microsoft.";
-    mockUsersState = { data: null, loading: false, error: reason };
+    mockRunSimulation.mockRejectedValue(new Error(reason));
     renderSettings();
 
     fireEvent.click(screen.getByRole("button", { name: /simulate fix/i }));
 
     expect(await screen.findByText(reason)).toBeInTheDocument();
-    expect(screen.queryByText(/still loading/i)).not.toBeInTheDocument();
   });
 
   test("renders Sign Out button", () => {

@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+* **CA Coverage** (new page under Clients, `GET /api/v1/ca-coverage`, CSV export): for
+  every user, whether an enforced Conditional Access policy requires MFA on every
+  sign-in, blocks legacy authentication (both `exchangeActiveSync` and `other`), and,
+  for privileged-role holders, requires admin MFA. Each gap names the policy and the
+  reason: excluded directly, by group or by role, as a guest; report-only; turned off;
+  only some applications; only under conditions (locations, platforms, risk, device
+  filter); another control allowed instead of MFA. It reads policies, users, transitive
+  group members and role holders with the existing `Policy.Read.All` and
+  `Directory.Read.All` permissions, stops with an error on any failed read rather than
+  report from partial data, and lists what it does not evaluate. The demo shows it on
+  recorded fictional policies.
+* Fixed: a Conditional Access policy that includes no users, groups or roles was treated
+  as covering everyone; in Microsoft Graph it covers no one.
+* **Simulate Fix** is now computed on the server for the signed-in tenant. It took the
+  tenant's users and roles from the browser, without the tenant's existing policies or
+  group members, with roles matched by name rather than role template ID, and with a
+  proposed policy that differed from the one Apply sends. The request is now
+  `{"control_id": ...}` only (other fields are refused); the result adds
+  `newly_affected_users` (users whose access the fix makes stricter; with security defaults
+  on, every user already counts as required to use MFA) and `security_defaults_enabled`,
+  with a warning that Conditional Access policies are not enforced while security
+  defaults stay on.
+* **Legacy authentication check (`CA_LEGACY_AUTH_BLOCK`) no longer passes falsely.** It
+  passed when only one of the two legacy client types (Exchange ActiveSync, other clients)
+  was blocked, when the blocking policy targeted only some users, and when a policy had no
+  grant controls. Now both types must be blocked for all users and all cloud apps (by one
+  policy or two); break-glass exclusions are allowed. The finding lists any type still
+  unblocked. A tenant with security defaults enabled passes, since security defaults
+  block legacy authentication (as the MFA checks already allowed). Tenants that passed before may now fail: that failure is real.
+* **A policy with no grant controls is no longer counted as a block.** Graph returns no
+  grant controls for policies that set only session controls, and those allow sign-in.
+  This affected the device code flow, authentication transfer and high-risk sign-in
+  checks as well. Policies created by Apply always send an explicit block and still pass.
 * **The HTTP access log no longer records sign-in secrets.** uvicorn logged every request
   path with its query string, so each Microsoft sign-in callback wrote its authorization
   code, `state` and `session_state` to the log, in development and in the production

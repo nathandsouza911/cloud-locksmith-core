@@ -17,17 +17,11 @@ from __future__ import annotations
 
 from app.services.graph.tenant_graph_context import TenantGraphContext
 from app.services.detection.conditional_access.ca_helpers import (
+    is_block_grant,
     is_effective_policy,
     is_mfa_grant,
     is_policy_enabled,
 )
-
-
-def _has_block_grant(policy: dict) -> bool:
-    grant = policy.get("grantControls")
-    if grant is None:
-        return True  # null grantControls = implicit block
-    return "block" in (grant.get("builtInControls") or [])
 
 
 def _targets_all_apps(policy: dict) -> bool:
@@ -56,7 +50,7 @@ async def detect_ca_high_risk_sign_in_block(*, ctx: TenantGraphContext) -> list[
         risk_levels = _get_risk_levels(policy)
         if "high" not in risk_levels:
             continue
-        if not _has_block_grant(policy):
+        if not is_block_grant(policy.get("grantControls")):
             continue
         pid = policy.get("id") or policy.get("displayName") or "<unnamed>"
         matching_policy_ids.append(str(pid))
