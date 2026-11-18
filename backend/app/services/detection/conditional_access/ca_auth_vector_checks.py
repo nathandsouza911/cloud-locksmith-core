@@ -98,6 +98,8 @@ async def detect_ca_device_code_flow_blocked(*, ctx: TenantGraphContext) -> list
     for policy in ctx.conditional_access_policies:
         if not is_policy_enabled(policy) or not is_effective_policy(policy):
             continue
+        if not targets_all_users(policy):  # a policy for some users leaves the rest uncovered
+            continue
 
         conditions = policy.get("conditions") or {}
 
@@ -147,6 +149,8 @@ async def detect_ca_authentication_transfer_blocked(*, ctx: TenantGraphContext) 
     blocking_policy_ids: list[str] = []
     for policy in ctx.conditional_access_policies:
         if not is_policy_enabled(policy) or not is_effective_policy(policy):
+            continue
+        if not targets_all_users(policy):  # a policy for some users leaves the rest uncovered
             continue
 
         conditions = policy.get("conditions") or {}
