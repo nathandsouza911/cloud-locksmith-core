@@ -55,3 +55,12 @@ def test_no_roles_log_keeps_user_id_and_object_counts(caplog):
     assert USER_ID in text
     assert "member_of_count=2" in text
     assert "group=2" in text
+
+
+def test_no_roles_log_is_debug_not_warning(caplog):
+    """A user with no admin role is the normal case: the scan checks every user."""
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        extract_directory_roles(MEMBER_OF, user_id=USER_ID)
+    levels = {r.levelno for r in caplog.records if r.name == LOGGER and "no_roles_returned" in r.getMessage()}
+    assert levels == {logging.DEBUG}

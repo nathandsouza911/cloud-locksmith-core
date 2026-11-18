@@ -70,8 +70,9 @@ def extract_directory_roles(
 
     if not current_roles:
         # Counts only: the raw /memberOf response holds directory data (group names, mail
-        # and proxy addresses, SIDs) that must not be copied into the logs.
-        logger.warning(
+        # and proxy addresses, SIDs) that must not be copied into the logs. DEBUG: no admin
+        # role is the normal case, and the scan checks every user.
+        logger.debug(
             "no_roles_returned user_id=%s member_of_count=%d types=%s",
             user_id,
             len(values),
