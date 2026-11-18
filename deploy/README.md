@@ -11,8 +11,8 @@ For several tenants (an MSP), or to register the app yourself, use the manual pa
 ## Requirements
 
 * Docker with Compose 2.24 or later (`docker compose version`).
-* A work account that is a member (not a guest) of the tenant and is allowed to register
-  applications. Personal Microsoft accounts are refused.
+* A work account that is allowed to register applications in the tenant. It should be a
+  member account (not a guest). Personal Microsoft accounts are refused.
 * A Global Administrator for the first full connect, because that sign-in asks for admin
   consent. Setup itself grants no consent and assigns no roles.
 * Chrome, Edge or Firefox. Sign-in cookies are `Secure`; these browsers accept them on
@@ -29,7 +29,16 @@ docker compose run --rm setup
 docker compose up -d
 ```
 
-`setup` prints a device code and a URL; sign in there with a work account. It then:
+`setup` prints a device code and a URL; sign in there with a work account. Before it
+creates anything it prints the tenant it signed in to (name, default domain and tenant
+ID); check it is the tenant you mean to scan. If your account is in more than one tenant,
+choose one with `--tenant`, which takes a tenant ID or a domain:
+
+```
+docker compose run --rm setup --tenant contoso.onmicrosoft.com
+```
+
+A tenant ID given with `--tenant` must match the tenant you sign in to. Setup then:
 
 * creates a single-tenant app registration named **Cloud Locksmith (local)** with one
   redirect URI, `http://localhost:8000/api/v1/auth/microsoft/callback`, and a client
@@ -95,7 +104,7 @@ docker compose run --rm setup --rotate-secret
 docker compose up -d --force-recreate
 ```
 
-Rotation signs in again (it must be the same tenant), adds a new 24-month secret, saves
+Rotation signs in again (it must be the same tenant; `--tenant` works here too), adds a new 24-month secret, saves
 it, then deletes the old one. Restart afterwards so the API reads the new secret; the
 second command is the one the script prints. The app-secret-expiry finding for this app
 names the rotate command.
@@ -104,11 +113,45 @@ names the rotate command.
 
 ```
 cd deploy
-docker compose exec postgres pg_dump -U cloudlocksmith cloudlocksmith > backup.sql
+docker compose exec -T postgres pg_dump -U cloudlocksmith -Fc -f /tmp/cl.dump cloudlocksmith
+docker compose cp postgres:/tmp/cl.dump <a path outside the repository>
 ```
 
-The dump contains the stored tenant data, including the encrypted delegated token.
-`cloud-locksmith.env` holds the key that decrypts it; keep both private.
+The dump contains your tenant data and the encrypted delegated tokens; the key that
+decrypts them is in `cloud-locksmith.env`. Store the dump safely, outside the repository,
+and keep both private.
+
+To restore a dump into the running database:
+
+```
+docker compose cp <dump file> postgres:/tmp/cl.dump
+docker compose exec -T postgres pg_restore -U cloudlocksmith -d cloudlocksmith --clean --if-exists /tmp/cl.dump
+```
+
+A dump restored to another install needs the same `cloud-locksmith.env`, or its tokens
+cannot be decrypted.
+
+## Troubleshooting
+
+* **`env file ... cloud-locksmith.env not found`** (or `cloud-locksmith-db.env`): setup
+  has not run yet. Run `docker compose run --rm setup` in `deploy/`.
+* **Setup cannot write its files on an SELinux host (Fedora, RHEL)**: the setup container
+  is not allowed to write to the bind-mounted `deploy/` directory. Create
+  `deploy/compose.override.yml` locally (do not commit it) with the `:z` option, which
+  relabels `deploy/` for container access, then run setup again:
+
+  ```
+  services:
+    setup:
+      volumes:
+        - ./:/out:z
+  ```
+
+* **Ports bound to `127.0.0.1` reachable from the local network (Linux)**: on Docker
+  Engine before 28.0, hosts on the same network segment could reach ports published on
+  a loopback address ([moby/moby#45610](https://github.com/moby/moby/issues/45610), fixed
+  in 28.0.0). Use Docker Engine 28 or later (`docker version`), or block the ports with a
+  host firewall.
 
 ## Uninstall
 

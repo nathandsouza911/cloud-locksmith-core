@@ -32,3 +32,7 @@ deploy/cloud-locksmith.env
 deploy/cloud-locksmith.env.tmp
 deploy/cloud-locksmith-db.env
 deploy/cloud-locksmith-db.env.tmp
+
+# Database backups made from deploy/ (they hold tenant data)
+deploy/*.sql
+deploy/*.dump
