@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+* The `evidence_fingerprint_allowlist_unmatched` warning is gone for the three controls that
+  logged it. `IDENTITY_USER_CONSENT_POLICY` and `IDENTITY_GUEST_INVITES_OPEN` now declare the
+  keys their detector emits (the fingerprint is unchanged: it already hashed the whole payload
+  through the fallback). `IDENTITY_APP_SECRET_EXPIRING_SOON` no longer declares a per-app list
+  that cannot match its tenant-level evidence; it hashes the whole payload, as before. Tests
+  use the real detector output.
+* The `[y/N]` confirmation was run in a real terminal (a pseudo-terminal in the setup image
+  with a stubbed `az`): Enter and `n` create nothing and sign out, `y` proceeds.
+
 * **`setup --uninstall`** deletes the app registration from the tenant and purges its
   recycle-bin copies (app and enterprise application). It signs in, checks the tenant against
   the config, deletes only an app whose client ID is in the config and whose name is "Cloud

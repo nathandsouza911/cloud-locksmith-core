@@ -115,12 +115,19 @@ MATERIAL_EVIDENCE_KEYS: dict[str, tuple[str, ...]] = {
         "scope",
         "scopes",
     ),
+    # The first group is what identity_risky_defaults_detector emits; the rest are older
+    # spellings that no detector produces (harmless: absent keys hash consistently).
     "IDENTITY_USER_CONSENT_POLICY": (
+        "permissionGrantPoliciesAssigned",
+        "non_compliant_entries",
+        "user_consent_locked_down",
         "consent_policy",
         "allow_user_consent",
         "permission_grant_policies",
     ),
     "IDENTITY_GUEST_INVITES_OPEN": (
+        "allowInvitesFrom",
+        "guest_invites_restricted",
         "guest_invite_setting",
         "allow_invites_from",
     ),
@@ -174,14 +181,10 @@ MATERIAL_EVIDENCE_KEYS: dict[str, tuple[str, ...]] = {
         "rule_id",
         "rule_name",
     ),
-    "IDENTITY_APP_SECRET_EXPIRING_SOON": (
-        "app_id",
-        "application_id",
-        "display_name",
-        "key_id",
-        "secret_id",
-        "expires_at",
-    ),
+    # IDENTITY_APP_SECRET_EXPIRING_SOON is deliberately absent. Its saved evidence is
+    # tenant-level (per-app detail is nested under ``affected_apps``), so a flat key list
+    # cannot name what is material and the old per-app list matched nothing. It hashes the
+    # whole payload: a new or changed expiring secret changes the fingerprint.
 }
 
 
