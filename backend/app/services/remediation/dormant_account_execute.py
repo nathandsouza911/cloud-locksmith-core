@@ -1,14 +1,25 @@
+def account_enabled(state: dict | None) -> bool | None:
+    """Enabled state from an adapter's account state: Microsoft returns
+    ``accountEnabled``, Google ``is_active``. None when neither is present."""
+    state = state or {}
+    if "accountEnabled" in state:
+        return bool(state["accountEnabled"])
+    if "is_active" in state:
+        return bool(state["is_active"])
+    return None
+
+
 class DormantAccountExecutor:
     async def build_snapshot(self, graph_client, evidence: dict) -> dict:
         user_id = evidence.get("user_id")
         if not user_id:
             raise ValueError("user_id is required for dormant account remediation")
 
-        state = await graph_client.get_user_account_state(user_id)
-        return {
-            "user_id": user_id,
-            "accountEnabled": bool(state.get("is_active", True)),
-        }
+        enabled = account_enabled(await graph_client.get_user_account_state(user_id))
+        if enabled is None:
+            # Rollback restores this value: never guess it.
+            raise ValueError("account state could not be read for the pre-change snapshot")
+        return {"user_id": user_id, "accountEnabled": enabled}
 
     async def preview(self, graph_client, evidence: dict) -> dict:
         return {
