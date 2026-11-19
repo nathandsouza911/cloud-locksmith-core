@@ -20,6 +20,10 @@ BREAK_GLASS_USAGE_ALERT_SEVERITY = "CRITICAL"
 BREAK_GLASS_SIGNIN_SOURCE = "break_glass_signins"
 BREAK_GLASS_DISPLAY_MARKER = "[BREAK-GLASS]"
 DEFAULT_LOOKBACK_MINUTES = 10
+# Sign-in logs can reach Graph well after the sign-in happened. Each poll
+# re-reads this far back past the checkpoint; already-seen event IDs are
+# skipped, so an event that arrives late is still alerted exactly once.
+LATE_ARRIVAL_OVERLAP = timedelta(hours=2)
 MAX_TRACKED_EVENT_IDS = 100
 
 
@@ -332,7 +336,8 @@ async def monitor_break_glass_account_usage(
     if not break_glass_user_ids and not break_glass_user_principal_names:
         return []
 
-    since = _last_check_timestamp(tenant)
+    checkpoint = _last_check_timestamp(tenant)
+    since = checkpoint - LATE_ARRIVAL_OVERLAP
     seen_event_ids = set(_tracked_event_ids(tenant)) | _existing_usage_event_ids(
         db=db,
         tenant_id=tenant.id,
@@ -369,7 +374,7 @@ async def monitor_break_glass_account_usage(
         return []
 
     alerts = []
-    latest_seen = since
+    latest_seen = checkpoint
     tracked_event_ids = _tracked_event_ids(tenant)
 
     for event in filtered_events:
