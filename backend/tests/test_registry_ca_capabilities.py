@@ -11,8 +11,8 @@ Remaining true scan-only CA controls (no executor, no rollback):
 
 This file enforces all three contracts:
   - True scan-only controls remain non-executable
-  - Wave 3B GUARDED controls are executable but not SAFE-campaign-eligible
-  - Wave 2 SAFE block controls are fully wired and campaign-eligible
+  - Wave 3B GUARDED controls are executable but not SAFE
+  - Wave 2 SAFE block controls are fully wired
 """
 
 import pytest
@@ -32,7 +32,7 @@ CA_WAVE3B_GUARDED_CONTROL_IDS = [
     "CA_LEGACY_AUTH_BLOCK",
 ]
 
-# Wave 2: promoted to SAFE — fully executable and campaign-eligible
+# Wave 2: promoted to SAFE — fully executable
 CA_BLOCK_POLICY_CONTROL_IDS = [
     "CA_DEVICE_CODE_FLOW_BLOCK",
     "CA_AUTHENTICATION_TRANSFER_BLOCK",
@@ -104,16 +104,6 @@ def test_wave3b_control_executor_is_ca_mfa_policy_executor(control_id):
     ), f"{control_id}: executor must be CAMFAPolicyExecutor after Wave 3B Phase 1"
 
 
-def test_wave3b_controls_not_safe_campaign_eligible():
-    """Wave 3B GUARDED controls are NOT SAFE-campaign-eligible — classification preserved."""
-    from app.services.remediation.fleet.campaign_plan import is_safe_control
-
-    for control_id in CA_WAVE3B_GUARDED_CONTROL_IDS:
-        assert not is_safe_control(
-            control_id
-        ), f"{control_id}: is_safe_control() returned True — GUARDED controls must not be SAFE-campaign-eligible"
-
-
 # ── Verification — all CA controls ───────────────────────────────────────────
 
 
@@ -131,16 +121,6 @@ def test_ca_control_verifier_is_callable(control_id):
     """Each CA control must have a callable verifier registered."""
     entry = CONTROL_REGISTRY[control_id]
     assert callable(entry.get("verifier")), f"{control_id}: verifier is missing or not callable — Phase A regression"
-
-
-def test_scan_only_ca_controls_not_campaign_eligible():
-    """Remaining scan-only CA controls must not be campaign-eligible."""
-    from app.services.remediation.fleet.campaign_plan import is_safe_control
-
-    for control_id in CA_SCAN_ONLY_CONTROL_IDS:
-        assert not is_safe_control(
-            control_id
-        ), f"{control_id}: is_safe_control() returned True — scan-only CA controls must not be campaign-eligible"
 
 
 # ── Wave 2 SAFE block controls ────────────────────────────────────────────────
@@ -161,13 +141,3 @@ def test_ca_block_policy_executor_is_wired(control_id):
     """Wave 2: CA block policy controls have a non-None executor."""
     entry = CONTROL_REGISTRY[control_id]
     assert entry["executor"] is not None, f"{control_id}: executor must be wired after Wave 2 promotion"
-
-
-def test_ca_block_policy_controls_are_campaign_eligible():
-    """Wave 2: CA block policy controls ARE campaign-eligible after SAFE promotion."""
-    from app.services.remediation.fleet.campaign_plan import is_safe_control
-
-    for control_id in CA_BLOCK_POLICY_CONTROL_IDS:
-        assert is_safe_control(
-            control_id
-        ), f"{control_id}: is_safe_control() returned False — expected SAFE after Wave 2 promotion"

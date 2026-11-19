@@ -6,7 +6,6 @@ Covers:
 - stale_service_principal_detector (unit, pure)
 - service_account_interactive_login_detector (unit, pure)
 - SAFE eligibility for all 3 new SAFE controls
-- Campaign rollback dispatch for CA block + stale SP (unit)
 - Control registry / baseline sync invariant
 - Control onboarding standard: all 19 controls pass
 """

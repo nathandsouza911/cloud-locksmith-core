@@ -2,8 +2,8 @@
 
 delete_tenant_all_data missed six tenant tables. Rows in assets, drift_notifications,
 remediation_actions or remediation_verifications made the deletion fail on a foreign
-key; rows in campaign_tenant_tasks and report_payloads (no foreign key) were left
-behind. The guard test fails when a new table with a tenant_id column is added
+key; rows in report_payloads (no foreign key) were left behind. (campaign_tenant_tasks,
+the other one, was dropped with the MSP surface.) The guard test fails when a new table with a tenant_id column is added
 without being handled.
 """
 
@@ -62,7 +62,7 @@ def _seed(db, tenant_id: str) -> None:
     db.add(audit)
     db.flush()
     p = {"t": tenant_id, "cr": finding.id, "ex": audit.id}
-    ver, ev, camp = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    ver, ev = uuid.uuid4(), uuid.uuid4()
     db.execute(text("INSERT INTO assets (tenant_id) VALUES (:t)"), p)
     db.execute(text("INSERT INTO remediation_actions (tenant_id) VALUES (:t)"), p)
     db.execute(
@@ -87,26 +87,6 @@ def _seed(db, tenant_id: str) -> None:
             "VALUES (:d, :t, :cr, :v, :e, 'C', 'HIGH', 'VERIFIED', false, false, 'A', 's')"
         ),
         {**p, "d": uuid.uuid4(), "v": ver, "e": ev},
-    )
-    org = uuid.uuid4()
-    db.execute(
-        text(
-            "INSERT INTO organizations (id, name, mode, created_at, fleet_mfa_enforcement_enabled) VALUES (:o, 'o', 'SINGLE', now(), false)"
-        ),
-        {"o": org},
-    )
-    db.execute(
-        text(
-            "INSERT INTO remediation_campaigns (id, organization_id, created_by, control_ids) VALUES (:c, :o, 'u', '[]')"
-        ),
-        {"c": camp, "o": org},
-    )
-    db.execute(
-        text(
-            "INSERT INTO campaign_tenant_tasks (id, campaign_id, tenant_id, compliance_result_id, control_id) "
-            "VALUES (:k, :c, :t, :cr, 'C')"
-        ),
-        {**p, "k": uuid.uuid4(), "c": camp},
     )
     db.execute(
         text("INSERT INTO report_payloads (tenant_id, report_type, payload, content_hash) VALUES (:t, 'r', '{}', 'h')"),
@@ -133,7 +113,6 @@ def test_delete_removes_all_rows_of_the_tenant_and_none_of_another(db_session):
         "remediation_verifications",
         "drift_notifications",
         "report_payloads",
-        "campaign_tenant_tasks",
     ):
         kept = db_session.execute(text(f'SELECT count(*) FROM "{table}" WHERE tenant_id = :t'), {"t": KEPT}).scalar()
         assert kept == 1, table

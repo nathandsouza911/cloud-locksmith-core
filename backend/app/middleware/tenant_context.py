@@ -41,8 +41,6 @@ PUBLIC_ROUTES = (
     "/api/v1/auth/microsoft/callback",
     "/api/v1/auth/microsoft/start",
     "/api/v1/demo/login",  # exists only in demo mode (404 elsewhere)
-    "/api/v1/auth/microsoft/msp-connect",
-    "/api/v1/msp/fleet-overview",
     "/api/v1/realtime/stream",
 )
 

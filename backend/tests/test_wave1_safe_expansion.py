@@ -2,7 +2,6 @@
 
 Covers:
   A. SAFE eligibility scoring for all 5 promoted/new controls
-  B. campaign_plan.is_safe_control() returns True for all 5 SAFE controls
   C. Password-never-expires detector logic (pure functions)
   D. App secret expiry detector logic (pure functions)
   E. Password-never-expires verifier (mock graph_get)
@@ -17,38 +16,6 @@ from types import SimpleNamespace
 # ---------------------------------------------------------------------------
 # A. SAFE eligibility scoring
 # ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# B. campaign_plan.is_safe_control returns True for all 5 SAFE controls
-# ---------------------------------------------------------------------------
-
-
-class TestCampaignPlanSafeControls:
-    SAFE_CONTROLS = [
-        "IDENTITY_UNUSED_ACCOUNT",
-        "IDENTITY_GUEST_INVITES_OPEN",
-        "IDENTITY_USER_CONSENT_POLICY",
-        "IDENTITY_OVERPRIVILEGED_USER",
-        "IDENTITY_ILLICIT_CONSENT_GRANTS",
-        "IDENTITY_PASSWORD_NEVER_EXPIRES",
-    ]
-
-    def test_safe_controls_recognised(self):
-        from app.services.remediation.fleet.campaign_plan import is_safe_control
-
-        for control_id in self.SAFE_CONTROLS:
-            assert is_safe_control(control_id), f"{control_id} should be recognised as SAFE by campaign_plan"
-
-    def test_manual_control_not_safe(self):
-        from app.services.remediation.fleet.campaign_plan import is_safe_control
-
-        assert not is_safe_control("IDENTITY_APP_SECRET_EXPIRING_SOON")
-
-    def test_ca_control_not_safe(self):
-        from app.services.remediation.fleet.campaign_plan import is_safe_control
-
-        assert not is_safe_control("CA_MFA_ALL_USERS")
 
 
 # ---------------------------------------------------------------------------

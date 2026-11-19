@@ -361,16 +361,6 @@ class TestPhase3SAFEReEvaluation:
 
         assert CONTROL_REGISTRY["CA_AUTHENTICATION_TRANSFER_BLOCK"]["auto_remediation_level"] == "SAFE"
 
-    def test_device_code_flow_block_is_campaign_eligible(self):
-        from app.services.remediation.fleet.campaign_plan import is_safe_control
-
-        assert is_safe_control("CA_DEVICE_CODE_FLOW_BLOCK")
-
-    def test_authentication_transfer_block_is_campaign_eligible(self):
-        from app.services.remediation.fleet.campaign_plan import is_safe_control
-
-        assert is_safe_control("CA_AUTHENTICATION_TRANSFER_BLOCK")
-
 
 class TestPhase4FrameworkCompliance:
     """Phase 4: Every new and modified control must pass all framework validators."""

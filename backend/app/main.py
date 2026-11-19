@@ -299,13 +299,10 @@ from app.api.v1.risk_feed import router as risk_feed_router
 
 app.include_router(risk_feed_router, prefix="/api/v1")
 
-from app.api.v1.fleet import router as fleet_router
+from app.api.v1.overview import router as overview_router
 
-app.include_router(fleet_router, prefix="/api/v1")
+app.include_router(overview_router, prefix="/api/v1")
 
-from app.api.v1.msp import router as msp_router
-
-app.include_router(msp_router, prefix="/api/v1")
 
 from app.api.v1.baseline import router as baseline
 
@@ -368,9 +365,6 @@ from app.api.v1.support import router as support_router
 
 app.include_router(support_router, prefix="/api/v1")
 
-from app.api.v1.fleet_campaigns import router as fleet_campaigns_router
-
-app.include_router(fleet_campaigns_router, prefix="/api/v1")
 
 from app.api.v1.drift_notifications import router as drift_notifications_router
 
@@ -394,7 +388,6 @@ app.include_router(work_router, prefix="/api/v1")
 # test_the_active_runs_route_is_not_shadowed_by_the_definition_route.
 from app.api.v1.workflow_runs import router as workflow_runs_router
 from app.api.v1.workflows import router as workflows_router
-from app.api.v1.clients import router as clients_router
 
 # Wave 2 — the generic workflow review surface every workflow now shares. It
 # owns /workflows/{key}/review/... and is registered before the library router
@@ -404,7 +397,6 @@ from app.api.v1.workflow_review import router as workflow_review_router
 app.include_router(workflow_runs_router, prefix="/api/v1")
 app.include_router(workflow_review_router, prefix="/api/v1")
 app.include_router(workflows_router, prefix="/api/v1")
-app.include_router(clients_router, prefix="/api/v1")
 
 if settings.DEMO_MODE:
     from app.demo.router import router as demo_router
@@ -481,8 +473,6 @@ async def start_background_scheduler():
 
 @app.on_event("startup")
 def handle_crash_recovery():
-    from app.services.remediation.crash_recovery import recover_campaign_jobs
-
     with SyncSessionLocal() as db:
         result = recover_stuck_executions(db)
         logger_startup.warning(
@@ -491,13 +481,6 @@ def handle_crash_recovery():
             result.get("failed", 0),
             result.get("verified_complete", 0),
         )
-        job_result = recover_campaign_jobs(db)
-        if job_result["reclaimed"] or job_result["permanently_failed"]:
-            logger_startup.warning(
-                "campaign_job_recovery_completed reclaimed=%s permanently_failed=%s",
-                job_result["reclaimed"],
-                job_result["permanently_failed"],
-            )
 
 
 from app.core.metrics import get_metrics

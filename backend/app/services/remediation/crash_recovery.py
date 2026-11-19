@@ -121,21 +121,3 @@ def recover_stuck_executions(db: Session) -> dict:
 
     db.commit()
     return {"processed": processed, "failed": failed, "verified_complete": verified_complete}
-
-
-def recover_campaign_jobs(db: Session) -> dict:
-    """On startup, reclaim any campaign scheduled jobs with expired leases.
-
-    This handles the crash window between claim and execution: if the
-    process died after claiming a job (CLAIMED or EXECUTING) but before
-    completing it, the lease will have expired. This function returns
-    those jobs to PENDING so the scheduler loop picks them up on the
-    next tick.
-
-    Returns a summary dict for structured logging.
-    """
-    from app.jobs.campaign_job_manager import recover_expired_leases
-
-    result = recover_expired_leases(db)
-    db.commit()
-    return result

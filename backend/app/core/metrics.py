@@ -8,7 +8,6 @@ _metrics = {
     "remediations_executed": 0,
     "remediations_failed": 0,
     "drift_detected": 0,
-    "fleet_divergence": 0,
     "auto_repairs_triggered": 0,
     "scheduler_failures": 0,
     "queue_drop_count": 0,

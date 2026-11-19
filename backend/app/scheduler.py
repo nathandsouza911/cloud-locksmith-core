@@ -6,7 +6,6 @@ from app.db.models.tenant import Tenant
 from app.db.session import SyncSessionLocal
 from app.jobs.auto_execute_remediations import run_auto_remediations
 from app.jobs.break_glass_monitor import run_break_glass_monitor
-from app.jobs.campaign_scheduler import run_campaign_scheduler
 from app.jobs.remediation_verification import run_verification_job
 from app.jobs.report_scheduler import run_report_scheduler
 from app.jobs.reset_remediation_counts import reset_remediation_counts
@@ -77,11 +76,6 @@ async def scheduler_loop():
         finally:
             if db:
                 db.close()
-
-        try:
-            await run_campaign_scheduler()
-        except Exception:
-            logger.exception("scheduler_campaign_error")
 
         try:
             await run_report_scheduler()
