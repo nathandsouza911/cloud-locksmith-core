@@ -59,7 +59,7 @@ services:
   # The seed job and the API share one image, so the backend is built once.
   seed:
     build: ./backend
-    image: ghcr.io/nathandsouza911/cloud-locksmith-core-backend:0.1.2
+    image: ghcr.io/nathandsouza911/cloud-locksmith-core-backend:0.2.0
     pull_policy: missing
     environment: *demo-api-env
     command: ["python", "-m", "app.demo.seed"]
@@ -70,7 +70,7 @@ services:
     networks: [backend]
 
   api:
-    image: ghcr.io/nathandsouza911/cloud-locksmith-core-backend:0.1.2
+    image: ghcr.io/nathandsouza911/cloud-locksmith-core-backend:0.2.0
     pull_policy: never  # the seed service pulls or builds it
     environment: *demo-api-env
     depends_on:
@@ -83,7 +83,7 @@ services:
     networks: [backend, frontend]
 
   dashboard:
-    image: ghcr.io/nathandsouza911/cloud-locksmith-core-dashboard-demo:0.1.2
+    image: ghcr.io/nathandsouza911/cloud-locksmith-core-dashboard-demo:0.2.0
     pull_policy: missing
     build:
       context: ./dashboard

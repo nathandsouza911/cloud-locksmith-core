@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "Cloud Locksmith"
     ENVIRONMENT: str = "development"
     PORT: int = 8000
+    # Not a safety switch: nothing reads it. Auto-remediation is ENABLE_AUTO_REMEDIATION and
+    # every executed fix needs an approval. Kept so existing .env files still load.
     REMEDIATION_DRY_RUN: bool = True
     ENABLE_SCHEDULER: bool = False
     # Verification lifecycle confirmation thresholds (Phase C)

@@ -31,7 +31,7 @@ if settings.DEMO_MODE:
     install_outbound_block()
 
 # Release version; tests/test_version_consistency.py keeps README, compose and package.json in step.
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.2.0"
 
 app = FastAPI(title=settings.APP_NAME, version=APP_VERSION)
 logger = logging.getLogger(__name__)
@@ -427,21 +427,6 @@ for route in app.routes:
 
 import asyncio
 from app.scheduler import scheduler_loop
-
-
-@app.on_event("startup")
-def check_remediation_dry_run_config():
-    if settings.ENVIRONMENT == "production" and settings.REMEDIATION_DRY_RUN:
-        logger_startup.warning(
-            "dry_run_enabled_in_production REMEDIATION_DRY_RUN=True in environment=production — "
-            "remediations will NOT be applied"
-        )
-    if settings.ENVIRONMENT != "production" and not settings.REMEDIATION_DRY_RUN:
-        logger_startup.warning(
-            "live_remediation_outside_production REMEDIATION_DRY_RUN=False in environment=%s — "
-            "remediations will be applied to real tenants",
-            settings.ENVIRONMENT,
-        )
 
 
 @app.on_event("startup")

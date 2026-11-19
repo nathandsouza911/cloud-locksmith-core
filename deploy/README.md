@@ -62,8 +62,9 @@ HTTPS. It sets `MICROSOFT_TENANT` to your tenant ID, so sign-in is limited to th
 tenant, and it leaves the scheduler and auto-remediation off. Use `localhost` in the
 browser; `http://[::1]` is not accepted.
 
-Until the `0.2.0` images are published, `docker compose up -d` builds the images from
-source. The first build takes several minutes. Every published port binds `127.0.0.1`;
+`docker compose up -d` pulls the prebuilt `0.2.0` images from `ghcr.io`. If they cannot be
+pulled (for example on a commit after the release) it builds them from source, which takes
+several minutes the first time. Every published port binds `127.0.0.1`;
 Postgres and Redis are on an internal network only.
 
 ## First sign-in
@@ -97,8 +98,8 @@ docker compose pull
 docker compose up -d
 ```
 
-Database migrations run when the API starts. Until `0.2.0` images are published, use
-`docker compose up -d --build` to rebuild from the updated checkout.
+Database migrations run when the API starts. On a checkout that is ahead of the
+latest release, use `docker compose up -d --build` to rebuild from the updated checkout.
 
 ## Rotate the client secret
 

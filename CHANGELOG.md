@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-11-19)
 
 * **One-command setup for a single tenant** (`deploy/`): `docker compose run --rm setup`
   signs in with a device code, creates a single-tenant app registration named "Cloud
@@ -8,7 +8,12 @@
   `deploy/cloud-locksmith.env` and `deploy/cloud-locksmith-db.env`; then
   `docker compose up -d` starts the stack on `127.0.0.1` ports 3000 and 8000. It grants no
   admin consent, assigns no roles, never prints a secret, never replaces an existing
-  config, and `--rotate-secret` replaces the client secret. See `deploy/README.md`.
+  config, and `--rotate-secret` replaces the client secret. Setup shows the tenant it
+  signed in to and asks `[y/N]` (default no) before it creates anything; `--yes` skips the
+  question and is required without a terminal. The README has uninstall steps and the
+  health route (`/api/v1/health`). Setup creates `deploy/cloud-locksmith-db.env` with only
+  the Postgres and Redis passwords, so those two services never receive the token
+  encryption key. It was run end to end against a real tenant on 2026-11-19.
 * **`LOCAL_LOOPBACK_ONLY`**: production mode without the HTTPS redirect and HSTS, for
   `http://localhost` installs. Startup is refused if any configured URL is not
   `http://localhost` or `http://127.0.0.1`.
@@ -102,6 +107,32 @@
   some users or groups passed the tenant-level check, leaving everyone else uncovered.
   Exclusions such as break-glass accounts are still allowed. Policies created by Apply
   include all users and still pass.
+
+* **Removed a misleading startup warning.** In production mode (which the one-command setup
+  uses) the API logged `REMEDIATION_DRY_RUN=True ... remediations will NOT be applied`, and
+  outside production it logged the opposite when the setting was false. The setting is read
+  by nothing and stops no remediation, so both lines were wrong. They are gone and the
+  setting is documented as inert. Auto-remediation is controlled by `ENABLE_AUTO_REMEDIATION`
+  (off in the generated config); with it off, a fix executes only after an approval.
+
+### Known issues in 0.2.0
+
+* **Mail-forwarding rules are not checked for some users.** In a live scan of one small tenant,
+  the per-mailbox fetch failed for 6 to 7 users (`mail_forwarding_rule_fetch_failed`,
+  `GraphAPIError`), including after `MailboxSettings.Read` was consented. The scan skips those
+  users and continues. The cause was not looked into (users without a mailbox are one
+  possibility, not confirmed), so do not read a clean forwarding result as full coverage.
+* **One usage-report call returned 403 during a Preview scan** (`S2SUnauthorized` on
+  `getOffice365ActiveUserDetail`). It did not recur on the full connect.
+* **Log noise:** `evidence_fingerprint_allowlist_unmatched` is logged for
+  `IDENTITY_APP_SECRET_EXPIRING_SOON`, `IDENTITY_USER_CONSENT_POLICY` and
+  `IDENTITY_GUEST_INVITES_OPEN`. The declared evidence keys do not match the keys those controls
+  produce, so the fingerprint falls back to the full payload. It predates this release.
+* **Not yet run against a real tenant:** `setup --rotate-secret`, `setup --tenant`, the
+  secret-expiry finding for the instance's own app, executing a fix from the dashboard, and the
+  `[y/N]` confirmation (unit-tested only). The rest of the setup, the Preview scan, the full
+  connect and the cleanup were run on 2026-11-19.
+* **Setup has no uninstall command.** `deploy/README.md` lists the manual steps.
 
 ## 0.1.2 (2026-11-15)
 
