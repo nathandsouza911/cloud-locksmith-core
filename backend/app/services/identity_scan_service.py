@@ -97,6 +97,7 @@ from app.services.detection.conditional_access.ca_guest_mfa import (
     detect_ca_guest_mfa,
 )
 from app.services.detection.conditional_access.ca_policy_checks import (
+    attach_exclusion_membership,
     detect_ca_break_glass_excluded,
 )
 from app.services.detection.conditional_access.ca_risk_checks import (
@@ -1062,8 +1063,14 @@ async def run_extended_controls(
                 passed=finding.get("passed", True),
                 severity=finding.get("severity", "LOW"),
                 evidence=finding.get("evidence") or {},
-                decision_status="RESOLVED" if finding.get("passed", True) else "PENDING",
+                decision_status=_extended_decision_status(finding.get("passed", True)),
             )
+
+
+def _extended_decision_status(passed: bool | None) -> str:
+    if passed is None:
+        return "UNKNOWN"
+    return "RESOLVED" if passed else "PENDING"
 
 
 async def _claim_scan_slot(tenant_id: str) -> bool:
@@ -1227,6 +1234,7 @@ async def run_identity_scan(db: AsyncSession, tenant, tenant_id: str | None = No
                 break_glass_accounts=bg_ids,
                 security_defaults_enabled=security_defaults_enabled,
             )
+            await attach_exclusion_membership(ctx, db=db, tenant=tenant)
             await run_extended_controls(
                 ctx=ctx,
                 db=db,

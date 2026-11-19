@@ -2068,12 +2068,16 @@ async def _build_tenant_graph_context(graph_client):
 
     policies = await graph_client.list_conditional_access_policies()
     break_glass_accounts = list(list_break_glass_user_ids(db=graph_client.db, tenant_id=graph_client.tenant.id))
-    return TenantGraphContext(
+    from app.services.detection.conditional_access.ca_policy_checks import attach_exclusion_membership
+
+    ctx = TenantGraphContext(
         tenant_id=graph_client.tenant.id,
         fetched_at=datetime.utcnow(),
         conditional_access_policies=policies,
         break_glass_accounts=break_glass_accounts,
     )
+    await attach_exclusion_membership(ctx, db=graph_client.db, tenant=graph_client.tenant)
+    return ctx
 
 
 def _verifier_passed(findings) -> bool:
