@@ -21,7 +21,7 @@ END = "<!-- scopes:end -->"
 TRUST_DOC = Path(__file__).resolve().parents[2] / "docs" / "trust.md"
 
 MODES = [
-    ("Full connect (connect a tenant, MSP connect)", DELEGATED_SCOPES),
+    ("Full connect (connect a tenant, re-authorize)", DELEGATED_SCOPES),
     ("Preview sign-in (read-only)", PREVIEW_SCOPES),
     ("Licence cost checker", LICENSE_COST_CHECKER_SCOPES),
 ]
