@@ -168,3 +168,27 @@ async def test_mail_forwarding_rows_close_for_users_without_a_mailbox(monkeypatc
 
     # bob's row is kept (unknown); carol's row closes.
     assert resolves["IDENTITY_MAIL_FORWARDING_RULE"] == [{ALICE, BOB}]
+
+
+@pytest.mark.asyncio
+async def test_phishing_resistant_row_is_kept_when_the_methods_read_fails(monkeypatch):
+    # Review R2-12: a failed read is unknown, not "no methods" (a false CRITICAL).
+    upserts: list[dict] = []
+
+    async def failing_methods(db, tenant, path):
+        raise RuntimeError("graph down")
+
+    async def recording_upsert(**kwargs):
+        upserts.append(kwargs)
+        return SimpleNamespace(id=1)
+
+    resolves = await _scan(
+        monkeypatch,
+        users=[_user(ADMIN)],
+        controls={"IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA"},
+        graph_get=failing_methods,
+        upsert_control_result=recording_upsert,
+    )
+
+    assert [u for u in upserts if u["control_id"] == "IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA"] == []
+    assert resolves["IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA"] == [{ADMIN}]

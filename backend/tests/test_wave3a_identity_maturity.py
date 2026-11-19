@@ -78,8 +78,20 @@ class TestAdminPhishingResistantMfaDetector:
         result = self._eval(roles=[_global_admin_role()], auth_methods=[_cba_method()])
         assert result["passed"] is True
 
-    def test_admin_with_tap_passes(self):
+    def test_admin_with_only_tap_fails(self):
+        # Review R2-12: a Temporary Access Pass is a short-lived bootstrap
+        # credential, not a phishing-resistant method.
         result = self._eval(roles=[_global_admin_role()], auth_methods=[_tap_method()])
+        assert result["passed"] is False
+
+    def test_admin_with_windows_hello_passes(self):
+        method = {"@odata.type": "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod", "id": "whfb-1"}
+        result = self._eval(roles=[_global_admin_role()], auth_methods=[method])
+        assert result["passed"] is True
+
+    def test_admin_with_platform_credential_passes(self):
+        method = {"@odata.type": "#microsoft.graph.platformCredentialAuthenticationMethod", "id": "psso-1"}
+        result = self._eval(roles=[_global_admin_role()], auth_methods=[method])
         assert result["passed"] is True
 
     def test_admin_with_only_totp_fails(self):

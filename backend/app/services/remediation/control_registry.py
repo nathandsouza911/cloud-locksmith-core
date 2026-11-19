@@ -566,7 +566,7 @@ CONTROL_REGISTRY = {
         "auto_remediation_level": "MANUAL",
         "insurance_relevant": True,
         "insurance_rationale": (
-            "Phishing-resistant MFA (FIDO2, CBA, TAP) is immune to AiTM proxy attacks that defeat SMS, "
+            "Phishing-resistant MFA (FIDO2 or passkeys, Windows Hello for Business, CBA) is immune to AiTM proxy attacks that defeat SMS, "
             "voice, and TOTP. Insurers increasingly require evidence of phishing-resistant MFA for "
             "privileged accounts as SMS/TOTP is no longer accepted as sufficient for admin roles."
         ),

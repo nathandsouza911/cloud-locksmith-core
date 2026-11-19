@@ -2,10 +2,12 @@
 
 Flags privileged admins who lack any phishing-resistant authentication method.
 Phishing-resistant methods are those immune to real-time phishing: FIDO2
-hardware keys, certificate-based authentication (CBA), and Temporary Access
-Pass (TAP). SMS, voice call, TOTP (software OATH), and Authenticator push
-notifications are explicitly NOT phishing-resistant — they can be defeated by
-adversary-in-the-middle (AiTM) proxies and SIM-swap attacks.
+security keys and passkeys, Windows Hello for Business, platform credentials
+(macOS Platform SSO) and certificate-based authentication (CBA). SMS, voice
+call, TOTP (software OATH), and Authenticator push notifications are NOT
+phishing-resistant — they can be defeated by adversary-in-the-middle (AiTM)
+proxies and SIM-swap attacks. A Temporary Access Pass is a short-lived
+bootstrap credential and does not count either.
 
 Target admin roles (by Entra display name):
     Global Administrator, Privileged Role Administrator,
@@ -22,9 +24,10 @@ from __future__ import annotations
 # Entra auth method odata.type suffixes (everything after the last ".")
 _PHISHING_RESISTANT_TYPES: frozenset[str] = frozenset(
     {
-        "fido2AuthenticationMethod",  # FIDO2 / hardware key
+        "fido2AuthenticationMethod",  # FIDO2 security key or passkey
+        "windowsHelloForBusinessAuthenticationMethod",  # Windows Hello for Business
+        "platformCredentialAuthenticationMethod",  # macOS Platform SSO
         "x509CertificateAuthenticationMethod",  # certificate-based authentication
-        "temporaryAccessPassAuthenticationMethod",  # Temporary Access Pass
     }
 )
 

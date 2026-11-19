@@ -633,12 +633,14 @@ async def run_user_controls(
                 methods_resp = await graph_get(db, tenant, f"/users/{uid}/authentication/methods")
                 auth_methods = methods_resp.get("value", []) if isinstance(methods_resp, dict) else []
             except Exception:
+                # Unknown, not "no methods" (a false CRITICAL): keep the existing row.
                 logger.exception(
                     "phishing_resistant_mfa_methods_fetch_failed tenant_id=%s user_id=%s",
                     tenant_id,
                     uid,
                 )
-                auth_methods = []
+                phish_reported.add(uid)
+                continue
             user = user_map.get(uid) or {}
             finding = evaluate_admin_phishing_resistant_mfa(
                 user_id=uid,
