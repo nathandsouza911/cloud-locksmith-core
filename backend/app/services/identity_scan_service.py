@@ -456,6 +456,8 @@ async def run_user_controls(
     mfa_reported: dict[str, set[str]] = {"IDENTITY_ADMIN_NO_MFA": set(), "IDENTITY_USER_NO_MFA": set()}
     for uid in all_user_ids:
         user = user_map[uid]
+        if user.get("accountEnabled") is False:
+            continue  # a disabled account cannot sign in: no MFA exposure
         entry = user_context.get(uid) or {"roles": [], "is_admin": False}
         control_id = "IDENTITY_ADMIN_NO_MFA" if entry["is_admin"] else "IDENTITY_USER_NO_MFA"
         if control_id not in baseline_controls:

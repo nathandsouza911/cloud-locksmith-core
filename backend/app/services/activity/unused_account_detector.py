@@ -98,9 +98,9 @@ def evaluate_unused_account(
     passed, severity, decision_status = _TIER_MAP[profile["tier"]]
 
     logger.info(
-        "unused_account_evaluated upn=%s tier=%s confidence=%s identity_active=%s "
+        "unused_account_evaluated user_id=%s tier=%s confidence=%s identity_active=%s "
         "workload_active=%s workload_available=%s",
-        user.get("userPrincipalName"),
+        user.get("id"),
         profile["tier"],
         profile["confidence"],
         profile["identity_active"],

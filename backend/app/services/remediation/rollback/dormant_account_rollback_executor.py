@@ -2,7 +2,9 @@ from app.utils.datetime import utc_now
 
 from app.db.models.compliance_result import ComplianceResult
 from app.db.models.remediation_audit import RemediationAuditLog
+from app.db.models.remediation_snapshot import RemediationSnapshot
 from app.services.identity_providers import get_identity_provider_adapter
+from app.services.remediation.dormant_account_execute import account_enabled
 from app.services.remediation.lifecycle import reconcile_rolled_back_state
 
 
@@ -18,10 +20,23 @@ async def rollback_dormant_account(
     reason: str,
     requested_by: str,
 ):
+    # Ownership first: the finding and its execution must belong to this tenant.
+    compliance = (
+        db.query(ComplianceResult)
+        .filter(
+            ComplianceResult.id == compliance_result_id,
+            ComplianceResult.tenant_id == tenant.id,
+        )
+        .one_or_none()
+    )
+    if compliance is None:
+        raise DormantAccountRollbackError("Compliance result not found for this tenant")
+
     execution = (
         db.query(RemediationAuditLog)
         .filter(
             RemediationAuditLog.compliance_result_id == compliance_result_id,
+            RemediationAuditLog.tenant_id == tenant.id,
             RemediationAuditLog.decision == "EXECUTED",
         )
         .order_by(RemediationAuditLog.created_at.desc())
@@ -34,17 +49,32 @@ async def rollback_dormant_account(
     if execution.rolled_back:
         raise DormantAccountRollbackError("Remediation has already been rolled back")
 
+    snapshot_row = (
+        db.query(RemediationSnapshot)
+        .filter(RemediationSnapshot.compliance_result_id == compliance_result_id)
+        .order_by(RemediationSnapshot.created_at.desc())
+        .first()
+    )
+    prior_enabled = account_enabled((snapshot_row.state if snapshot_row else None) or {})
+    if prior_enabled is None:
+        # Never re-enable an account without knowing it was enabled before the fix.
+        raise DormantAccountRollbackError("No pre-change snapshot of the account state; nothing restored")
+
     user_id = execution.resource_id
     adapter = get_identity_provider_adapter(db=db, tenant=tenant)
 
-    try:
-        await adapter.set_user_account_enabled(user_id, True)
-        user_state = await adapter.get_user_account_state(user_id)
-    except Exception as exc:
-        raise DormantAccountRollbackError(f"Graph rollback failed: {str(exc)}") from exc
+    if prior_enabled:
+        try:
+            await adapter.set_user_account_enabled(user_id, True)
+            user_state = await adapter.get_user_account_state(user_id)
+        except Exception as exc:
+            raise DormantAccountRollbackError(f"Graph rollback failed: {str(exc)}") from exc
 
-    if not bool((user_state or {}).get("accountEnabled", False)):
-        raise DormantAccountRollbackError("Rollback verification failed: account is still disabled")
+        if not account_enabled(user_state):
+            raise DormantAccountRollbackError("Rollback verification failed: account is still disabled")
+        message = "User re-enabled successfully"
+    else:
+        message = "The account was already disabled before the fix; left disabled"
 
     execution.rolled_back = True
     execution.execution_status = "ROLLED_BACK"
@@ -62,19 +92,10 @@ async def rollback_dormant_account(
         explanation_factors={
             "reason": reason,
             "requested_by": requested_by,
-            "verified_account_enabled": True,
+            "verified_account_enabled": prior_enabled,
         },
         explanation_risk_note="Manual rollback",
         rolled_back=True,
-    )
-
-    compliance = (
-        db.query(ComplianceResult)
-        .filter(
-            ComplianceResult.id == compliance_result_id,
-            ComplianceResult.tenant_id == tenant.id,
-        )
-        .one_or_none()
     )
 
     if compliance:
@@ -82,7 +103,7 @@ async def rollback_dormant_account(
         evidence = compliance.evidence or {}
         if isinstance(evidence, dict):
             evidence["last_rollback_status"] = "SUCCESS"
-            evidence["last_rollback_message"] = "User re-enabled successfully"
+            evidence["last_rollback_message"] = message
             evidence["last_rollback_at"] = utc_now().isoformat()
             compliance.evidence = evidence
 
@@ -94,7 +115,7 @@ async def rollback_dormant_account(
         "status": "ROLLED_BACK",
         "compliance_result_id": compliance_result_id,
         "user_id": user_id,
-        "user_enabled": True,
-        "message": "User re-enabled successfully",
+        "user_enabled": prior_enabled,
+        "message": message,
         "rolled_back_at": rolled_back_at,
     }
