@@ -13,9 +13,14 @@ USER_CONTROL_ID = "IDENTITY_OVERPRIVILEGED_USER"
 LEGACY_CONTROL_ID = "IDENTITY_OVERPRIVILEGED_ADMIN"
 CONTROL_ID = USER_CONTROL_ID
 GLOBAL_ADMINISTRATOR = "Global Administrator"
+# Directory roles that grant read access to non-sensitive data only: holding
+# one does not make a user an admin.
 NON_PRIVILEGED_ROLE_NAMES = {
     "User",
     "Guest",
+    "Directory Readers",
+    "Message Center Reader",
+    "Usage Summary Reports Reader",
 }
 
 logger = logging.getLogger(__name__)
