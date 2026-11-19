@@ -126,8 +126,11 @@ def _user_summary(user: dict, current_roles: list[dict[str, str]]) -> dict:
     }
 
 
-async def detect_overprivileged_controls(*, db, tenant) -> dict:
-    users = await fetch_users(db, tenant)
+async def detect_overprivileged_controls(*, db, tenant, users: list[dict] | None = None) -> dict:
+    # The scan passes the user list it already read; a second fetch could fail
+    # on its own and (fetch_users returns [] on error) report zero admins.
+    if users is None:
+        users = await fetch_users(db, tenant)
     break_glass_user_ids = set(await list_break_glass_user_ids_async(db=db, tenant_id=tenant.id))
     user_findings: list[dict] = []
     included_global_admins: list[dict] = []
@@ -182,6 +185,12 @@ async def detect_overprivileged_controls(*, db, tenant) -> dict:
             excluded_break_glass_global_admins.append(summary)
         else:
             included_global_admins.append(summary)
+
+    if not users:
+        # Every tenant has at least one user, so an empty list means the read
+        # failed. Zero admins would be a false pass: report no tenant result.
+        logger.warning("overprivileged_admin_tenant_check_skipped tenant_id=%s reason=no_users_read", tenant.id)
+        return {"tenant_finding": None, "user_findings": user_findings}
 
     global_admin_count = len(included_global_admins)
     tenant_passed, tenant_severity = _tenant_severity_and_pass(global_admin_count)
