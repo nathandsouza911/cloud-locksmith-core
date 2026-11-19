@@ -202,15 +202,15 @@ class TestGuestInvitePolicy:
         guest = next(r for r in results if r["control_id"] == "IDENTITY_GUEST_INVITES_OPEN")
         assert guest["passed"] is True
 
-    def test_admins_only_passes(self):
-        """adminsOnly is MORE restrictive than adminsAndGuestInviters — must PASS."""
+    def test_none_passes(self):
+        """none (nobody can invite) is the strictest Graph value — must PASS."""
         from app.services.detection.identity_risky_defaults_detector import (
             evaluate_identity_default_controls,
         )
 
-        results = evaluate_identity_default_controls(self._snapshot("adminsOnly"))
+        results = evaluate_identity_default_controls(self._snapshot("none"))
         guest = next(r for r in results if r["control_id"] == "IDENTITY_GUEST_INVITES_OPEN")
-        assert guest["passed"] is True, "adminsOnly is more restrictive than adminsAndGuestInviters — must PASS"
+        assert guest["passed"] is True, "none is stricter than adminsAndGuestInviters — must PASS"
 
     def test_everyone_fails(self):
         from app.services.detection.identity_risky_defaults_detector import (
