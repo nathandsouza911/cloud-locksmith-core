@@ -326,10 +326,30 @@ async def run_user_controls(
         }
         forwarding_findings = 0
         rules_by_user, rules_unavailable = await _fetch_inbox_rules(db=db, tenant=tenant, users=standard_users)
+        unreadable = set(rules_unavailable)
         for user in standard_users:
             user_id = user.get("id")
+            if user_id in unreadable:
+                # Unknown, not hidden: a skipped mailbox made the control look
+                # like a pass on partial data. passed=None never hides a FAIL.
+                await _safe_upsert_control_result(
+                    db=db,
+                    tenant_id=tenant_id,
+                    control_id="IDENTITY_MAIL_FORWARDING_RULE",
+                    resource_type="USER",
+                    resource_id=user_id,
+                    passed=None,
+                    severity="CRITICAL",
+                    evidence={
+                        "user_id": user_id,
+                        "user_principal_name": user.get("userPrincipalName"),
+                        "reason": "mailbox_rules_unreadable",
+                    },
+                    decision_status="UNKNOWN",
+                )
+                continue
             if user_id not in rules_by_user:
-                continue  # no mailbox, or rules could not be read (logged)
+                continue  # no mailbox
             rules = rules_by_user[user_id]
             result = evaluate_user_forwarding_rules(user, rules, tenant_domains)
             if result is None:
