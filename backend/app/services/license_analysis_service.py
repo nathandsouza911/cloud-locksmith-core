@@ -229,12 +229,26 @@ def analyze_license_data(
     if not activity_available:
         logger.warning(
             "[LicenseOptimizer] Activity reports unavailable for tenant %s — "
-            "OVERLICENSED_USER detection is disabled; INACTIVE_USER detection "
-            "falls back to account creation date only",
+            "INACTIVE_USER and OVERLICENSED_USER detection are disabled",
             tenant_id,
         )
 
     activity_map = _build_activity_map(activity_rows)
+    # Inactivity is only known when the report is available and its user names
+    # match the directory. With the report privacy setting on, names are hashed
+    # and nothing matches; treating that as "no activity" flagged every user.
+    user_keys = {
+        (_first_present(user, "userPrincipalName", "mail") or "").lower()
+        for user in users
+        if user.get("assignedLicenses")
+    }
+    inactivity_known = activity_available and any(key in activity_map for key in user_keys if key)
+    if activity_available and activity_map and not inactivity_known:
+        logger.warning(
+            "[LicenseOptimizer] Activity report user names match no user for tenant %s "
+            "(report names concealed?) — INACTIVE_USER detection is disabled",
+            tenant_id,
+        )
     sku_catalog_by_id, _sku_catalog_by_part_number = _build_sku_catalog(subscribed_skus)
 
     logger.info(
@@ -275,7 +289,7 @@ def analyze_license_data(
 
         last_activity = activity.get("last_activity")
         created_at = _parse_datetime(_first_present(user, "createdDateTime"))
-        is_inactive = bool(
+        is_inactive = inactivity_known and bool(
             (last_activity is not None and last_activity <= inactivity_cutoff)
             or (last_activity is None and created_at is not None and created_at <= inactivity_cutoff)
         )
