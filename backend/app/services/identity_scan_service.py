@@ -427,8 +427,9 @@ async def run_user_controls(
             detection_source = "security_defaults"
         elif security_defaults_enabled is None or mfa_by_user is None or uid not in mfa_by_user:
             # Security defaults or the tenant could not be read: UNKNOWN, not FAIL or PASS.
+            # passed=None is stored as NOT_EVALUATED (upsert_control_result).
             mfa_eval = {
-                "passed": False,
+                "passed": None,
                 "status": "unknown",
                 "enabled_policy_ids": [],
                 "report_only_policy_ids": [],
@@ -486,7 +487,7 @@ async def run_user_controls(
             evidence=evidence,
             decision_status=decision_status,
         )
-        if mfa_eval["passed"]:
+        if mfa_eval["passed"] is not False:  # passed, or unknown: not a failure
             continue
         if entry["is_admin"]:
             admin_mfa_failures.append(evidence)

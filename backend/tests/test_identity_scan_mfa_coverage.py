@@ -140,6 +140,8 @@ async def test_graph_read_failure_records_unknown_never_a_pass(monkeypatch):
 
     assert set(rows) == {ALICE, BOB, CAROL, ADMIN}
     for row in rows.values():
-        assert row["passed"] is False
+        # Unknown is stored as NOT_EVALUATED (passed=None): never a pass, and never a
+        # failure either (review 2026-11-19, R1-3).
+        assert row["passed"] is None
         assert row["decision_status"] == "UNKNOWN"
         assert row["evidence"]["mfa_coverage_status"] == "unknown"
