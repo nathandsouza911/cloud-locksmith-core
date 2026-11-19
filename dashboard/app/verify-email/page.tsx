@@ -25,7 +25,7 @@ function VerifyEmailContent() {
       .post("/api/auth/verify-email", { token })
       .then(() => {
         setState("success");
-        setTimeout(() => router.replace("/msp/login"), 2000);
+        setTimeout(() => router.replace("/login"), 2000);
       })
       .catch((err: unknown) => {
         setState("error");
@@ -42,7 +42,7 @@ function VerifyEmailContent() {
       {state === "error" && (
         <>
           <p className="text-red-400 text-sm mb-4">{errorMsg}</p>
-          <a href="/msp/login" className="text-cyan-400 hover:text-cyan-300 text-sm">
+          <a href="/login" className="text-cyan-400 hover:text-cyan-300 text-sm">
             Go to login
           </a>
         </>

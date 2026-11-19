@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle, Plus, Shield } from "lucide-react";
+import { CheckCircle, Plus, Shield } from "lucide-react";
 import {
   Button,
   Card,
@@ -12,7 +12,7 @@ import {
   StatCard,
   TableSkeleton,
 } from "@/components/ui";
-import { useBaselineTemplates, useFleetPosture } from "@/lib/api/hooks";
+import { useBaselineTemplates } from "@/lib/api/hooks";
 import * as ep from "@/lib/api/endpoints";
 import { BADGE_LABELS, BADGE_STYLES, BASELINE_CONTROLS, toSelectableControls } from "@/lib/baselineControls";
 
@@ -26,16 +26,6 @@ type ApplyResult = {
   message: string;
 };
 
-function postureColor(score: number) {
-  if (score >= 80) return "#22d3ee";
-  if (score >= 60) return "#facc15";
-  return "#f87171";
-}
-
-function postureValue(score: number | null) {
-  return score ?? 0;
-}
-
 export default function BaselinesPage() {
   const [selectedControls, setSelectedControls] = useState<string[]>(
     BASELINE_CONTROLS.map((control) => control.id),
@@ -48,11 +38,8 @@ export default function BaselinesPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const fleetQuery = useFleetPosture();
   const templatesQuery = useBaselineTemplates();
-  const tenants = fleetQuery.data?.tenants ?? [];
   const templates = templatesQuery.data ?? [];
-  const affectedTenants = tenants.filter((tenant) => tenant.failed_controls > 0);
   const criticalControls = BASELINE_CONTROLS.filter((control) => control.severity === "CRITICAL").length;
 
   useEffect(() => {
@@ -101,7 +88,6 @@ export default function BaselinesPage() {
       const result = await ep.applyBaseline(payload);
       setApplyResult(result);
       setToast(`Applied ${payload.baseline_name}`);
-      fleetQuery.refetch();
       templatesQuery.refetch();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Apply failed");
@@ -129,7 +115,7 @@ export default function BaselinesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Security Baselines"
-        subtitle="Create reusable identity baselines, select them later, and apply the chosen baseline across your tenant fleet."
+        subtitle="Create reusable identity baselines, select them later, and apply the chosen baseline to your tenant."
         actions={
           <div className="flex gap-2">
             <Button variant="primary" size="sm" loading={applying} onClick={() => handleApply()}>
@@ -145,20 +131,13 @@ export default function BaselinesPage() {
 
       {actionError ? <ErrorState message={actionError} /> : null}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StatCard
           label="Controls in Baseline"
           value={selectedControls.length}
           sub={`of ${BASELINE_CONTROLS.length} available`}
           accent="text-cyan-400"
           icon={<Shield size={18} />}
-        />
-        <StatCard
-          label="Tenants Affected"
-          value={fleetQuery.loading ? "-" : affectedTenants.length}
-          sub="have failed controls"
-          accent="text-yellow-400"
-          icon={<AlertTriangle size={18} />}
         />
         <StatCard
           label="Critical Controls"
@@ -311,39 +290,6 @@ export default function BaselinesPage() {
                     </div>
                   );
                 })}
-              </div>
-            )}
-          </Card>
-
-          <Card className="overflow-hidden">
-            <div className="border-b border-gray-800 px-5 py-3.5">
-              <p className="text-sm font-semibold text-gray-200">Tenants with Baseline Gaps</p>
-            </div>
-            {fleetQuery.loading ? (
-              <div className="p-4">
-                <TableSkeleton rows={5} cols={2} />
-              </div>
-            ) : fleetQuery.error ? (
-              <ErrorState message={fleetQuery.error} />
-            ) : affectedTenants.length === 0 ? (
-              <EmptyState message="All tenants are compliant" />
-            ) : (
-              <div className="divide-y divide-gray-800/50">
-                {affectedTenants.map((tenant) => (
-                  <div key={tenant.tenant_id} className="flex items-center gap-3 px-5 py-3">
-                    <div
-                      className="h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ background: postureColor(postureValue(tenant.posture_score)) }}
-                    />
-                    <span className="flex-1 truncate text-sm text-gray-300">{tenant.tenant_name}</span>
-                    <span
-                      className="text-xs font-bold tabular-nums"
-                      style={{ color: postureColor(postureValue(tenant.posture_score)) }}
-                    >
-                      {tenant.posture_score ?? "-"}
-                    </span>
-                  </div>
-                ))}
               </div>
             )}
           </Card>

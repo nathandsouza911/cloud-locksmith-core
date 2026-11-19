@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Shield } from "lucide-react";
@@ -105,13 +104,6 @@ export default function LoginPage() {
               {loginLoading ? "Redirecting..." : "Sign in with Microsoft"}
               {!loginLoading ? <ArrowRight size={16} /> : null}
             </button>
-
-            <p className="mt-6 text-center text-sm text-gray-500">
-              MSP administrator?{" "}
-              <Link href="/msp/login" className="text-cyan-400 hover:text-cyan-300">
-                Use MSP login
-              </Link>
-            </p>
           </>
         )}
       </div>

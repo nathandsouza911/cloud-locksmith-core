@@ -6,17 +6,14 @@ import {
   AlertTriangle,
   ShieldHalf,
   BookOpen,
-  Building2,
   ChevronRight,
   FileBarChart2,
-  BarChart3,
   HelpCircle,
   LayoutDashboard,
   Library,
   LogOut,
   Menu,
   Moon,
-  Plus,
   Search,
   Settings,
   Shield,
@@ -28,23 +25,18 @@ import {
   Users,
   Receipt,
   MessageSquare,
-  Layers,
   ClipboardList,
   KeyRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { Button } from "@/components/ui";
 import { PreviewModeBanner } from "@/components/ui/PreviewModeBanner";
 import { useBreakGlassEvents } from "@/lib/api/hooks";
 import { useAuth } from "@/lib/auth-context";
-import { startMicrosoftOAuth } from "@/lib/auth";
 import { loginPathKeepingConnectError } from "@/lib/connect-errors";
 
 // Sprint 1 — navigation is organised by WORK, not by data category
-// (Product Bible §14). "My Work" leads; the posture Dashboard is demoted under
-// Fleet rather than removed, and every previously-reachable screen stays
-// reachable.
+// (Product Bible §14). "My Work" leads; the posture Dashboard sits under Posture.
 const NAV_GROUPS = [
   {
     label: "Work",
@@ -53,14 +45,11 @@ const NAV_GROUPS = [
       { href: "/work/oauth-review", label: "OAuth Review", icon: KeyRound },
       { href: "/workflows", label: "Workflow Library", icon: Library },
       { href: "/risk-feed", label: "Risk Feed", icon: Zap },
-      { href: "/campaigns", label: "Campaigns", icon: Layers, mspOnly: true },
-      { href: "/operations/live", label: "Operations", icon: Activity, mspOnly: true },
     ],
   },
   {
-    label: "Clients",
+    label: "Tenant",
     items: [
-      { href: "/tenants", label: "Clients", icon: Building2 },
       { href: "/users", label: "Users", icon: Users },
       { href: "/ca-coverage", label: "CA Coverage", icon: ShieldHalf },
       { href: "/remediation-timeline", label: "Remediation Timeline", icon: Activity },
@@ -71,13 +60,12 @@ const NAV_GROUPS = [
     label: "Reports",
     items: [
       { href: "/reports", label: "Reports", icon: FileBarChart2 },
-      { href: "/fleet-report", label: "Fleet Report", icon: BarChart3, mspOnly: true },
       { href: "/compliance", label: "Compliance", icon: ShieldCheck },
       { href: "/cost-optimization", label: "Cost Optimization", icon: Receipt },
     ],
   },
   {
-    label: "Fleet",
+    label: "Posture",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/dashboard/attack-paths", label: "Attack Paths", icon: AlertTriangle },
@@ -106,7 +94,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     tenants,
     selectedTenant,
     requiresTenantSelection,
-    isSmb,
     isPreviewMode,
     setActiveTenantId,
     logout,
@@ -128,18 +115,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const initials = useMemo(() => (user?.email ?? "AD").slice(0, 2).toUpperCase(), [user?.email]);
   const latestBreakGlassEvent = breakGlassEventsQuery.data?.[0] ?? null;
-  const navGroups = useMemo(
-    () =>
-      NAV_GROUPS.map((group) => ({
-        ...group,
-        items: group.items.filter((item) => {
-          if (item.href === "/tenants" && isSmb) return false;
-          if ((item as { mspOnly?: boolean }).mspOnly && isSmb) return false;
-          return true;
-        }),
-      })).filter((group) => group.items.length > 0),
-    [isSmb],
-  );
 
   if (loading) {
     return (
@@ -175,11 +150,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
           <div>
             <p className="text-sm font-bold tracking-tight text-white">Cloud Locksmith</p>
-            <p className="text-[10px] text-gray-400 tracking-wider uppercase">MSP Security</p>
+            <p className="text-[10px] text-gray-400 tracking-wider uppercase">Identity Security</p>
           </div>
         </div>
 
-        {!isSmb ? (
+        {/* Only users who can reach more than one tenant (e.g. preview plus an owned tenant) pick one. */}
+        {tenants.length > 1 ? (
           <div className="px-4 py-4 border-b border-gray-800 space-y-3">
             <div>
               <p className="text-[10px] font-semibold tracking-widest text-gray-500 uppercase mb-2">
@@ -198,22 +174,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 ))}
               </select>
             </div>
-            <Button
-              variant="primary"
-              size="sm"
-              className="w-full justify-center"
-              onClick={() => {
-                startMicrosoftOAuth("msp_connect");
-              }}
-            >
-              <Plus size={13} />
-              Add Tenant
-            </Button>
           </div>
         ) : null}
 
         <nav className="flex-1 min-h-0 px-3 py-4 overflow-y-auto space-y-5">
-          {navGroups.map((group) => (
+          {NAV_GROUPS.map((group) => (
             <div key={group.label} data-nav-group={group.label}>
               <p
                 data-testid="nav-group-label"
@@ -271,11 +236,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-gray-200 truncate">{user?.email ?? "Admin"}</p>
               <p className="text-[10px] text-gray-500">
-                {isSmb
-                  ? "Tenant Owner"
-                  : requiresTenantSelection
-                    ? "Select a tenant to continue"
-                    : "MSP Administrator"}
+                {requiresTenantSelection ? "Select a tenant to continue" : "Tenant Owner"}
               </p>
             </div>
             <button

@@ -30,11 +30,10 @@ interface AuthContextValue {
   isReady: boolean;
   authed: boolean;
   requiresTenantSelection: boolean;
-  isSmb: boolean;
   isPreviewMode: boolean;
   sessionContext: SessionContext | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, name?: string, isMsp?: boolean) => Promise<void>;
+  signup: (email: string, password: string, name?: string) => Promise<void>;
   logout: () => void | Promise<void>;
   setActiveTenantId: (tenantId: string | null) => void;
   refreshTenants: () => Promise<UserTenantAccessItem[]>;
@@ -51,7 +50,6 @@ const AuthContext = createContext<AuthContextValue>({
   isReady: false,
   authed: false,
   requiresTenantSelection: false,
-  isSmb: false,
   isPreviewMode: false,
   sessionContext: null,
   login: async () => {},
@@ -193,7 +191,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signup = useCallback(
-    async (email: string, password: string, name?: string, isMsp?: boolean) => {
+    async (email: string, password: string, name?: string) => {
       // Verified signup: creates an unverified account and emails a verification
       // link. NO session is issued here — the user must verify their email before
       // they can sign in. (The legacy unverified /auth/signup endpoint is gone.)
@@ -204,7 +202,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email,
           password,
           ...(name ? { name } : {}),
-          ...(isMsp ? { is_msp: true } : {}),
         });
       } catch (err) {
         resetAuthState();
@@ -236,10 +233,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // authed is derived from user presence, not a stored token.
   const authed = !loading && !!user;
   const requiresTenantSelection = authed && tenants.length > 1 && !tenantId;
-  const isSmb =
-    sessionContext !== null
-      ? sessionContext.mode === "SMB"
-      : tenants.length > 0 && tenants.every((t) => t.account_type === "SMB");
   const isPreviewMode =
     sessionContext !== null ? sessionContext.is_preview : selectedTenant?.role === "READ_ONLY";
 
@@ -255,7 +248,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isReady,
         authed,
         requiresTenantSelection,
-        isSmb,
         isPreviewMode: isPreviewMode ?? false,
         sessionContext,
         login,

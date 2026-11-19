@@ -45,7 +45,6 @@ jest.mock("@/lib/auth-context", () => ({
     tenants: [{ tenant_id: "tenant-1", tenant_name: "Acme Corp", role: "admin" }],
     selectedTenant: { tenant_id: "tenant-1", tenant_name: "Acme Corp" },
     requiresTenantSelection: false,
-    isSmb: false,
     isPreviewMode: false,
     setActiveTenantId: jest.fn(),
     logout: jest.fn(),

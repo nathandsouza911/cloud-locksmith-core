@@ -1,31 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import {
-  AlertTriangle,
-  Building2,
-  RefreshCw,
-  Shield,
-  ShieldCheck,
-  ShieldQuestion,
-  WandSparkles,
-} from "lucide-react";
+import { AlertTriangle, RefreshCw, Shield, ShieldCheck, ShieldQuestion, WandSparkles } from "lucide-react";
 
-import { Button, Card, EmptyState, ErrorState, PageHeader, StatCard, TableSkeleton } from "@/components/ui";
-import { TenantCard } from "@/components/data/renderers";
-import { useComplianceResults, useFleetOverview } from "@/lib/api/hooks";
-import * as ep from "@/lib/api/endpoints";
+import { Button, Card, ErrorState, PageHeader, StatCard, TableSkeleton } from "@/components/ui";
+import { useComplianceResults, useOverview } from "@/lib/api/hooks";
 import { startMicrosoftOAuth } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
-import type { ComplianceResult, FleetOverviewTopRisk, Severity } from "@/types";
+import type { ComplianceResult, Severity } from "@/types";
 import { scoreBandAccent } from "@/utils/posture";
-
-const OFFBOARDING_CONTROLS = new Set([
-  "IDENTITY_ADMIN_OVERPRIVILEGED",
-  "IDENTITY_OVERPRIVILEGED_ADMIN",
-  "IDENTITY_DORMANT_ACCOUNT",
-]);
 
 const severityOrder: Record<Severity, number> = {
   CRITICAL: 4,
@@ -79,23 +63,15 @@ function findingTarget(finding: ComplianceResult) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { tenants: linkedTenants, setActiveTenantId, tenantId, isSmb } = useAuth();
-  const fleetQuery = useFleetOverview();
+  const { tenants: linkedTenants, tenantId } = useAuth();
+  const overviewQuery = useOverview();
   const complianceQuery = useComplianceResults(tenantId);
 
-  const [loadingRiskKey, setLoadingRiskKey] = useState<string | null>(null);
-
-  const fleetData = fleetQuery.data;
-  const tenants = useMemo(
-    () => [...(fleetData?.tenants ?? [])].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0)),
-    [fleetData?.tenants],
-  );
-  const aggregate = fleetData?.aggregate;
-  const topRisks = fleetData?.top_risks ?? [];
   const activeTenant = linkedTenants.find((tenant) => tenant.tenant_id === tenantId) ?? null;
-  const activeTenantPosture = tenants.find((t) => t.tenant_id === tenantId) ?? null;
+  // /api/v1/overview covers only the session tenant.
+  const activeTenantPosture = overviewQuery.data?.tenants.find((t) => t.tenant_id === tenantId) ?? null;
   const complianceRefetch = complianceQuery.refetch;
-  const fleetRefetch = fleetQuery.refetch;
+  const overviewRefetch = overviewQuery.refetch;
   const activeTenantIssues = useMemo(
     () =>
       (complianceQuery.data ?? [])
@@ -118,54 +94,36 @@ export default function DashboardPage() {
     [activeTenantIssues],
   );
 
-  function refetchFleet() {
-    fleetRefetch();
+  function refetchAll() {
+    overviewRefetch();
     complianceRefetch();
-  }
-
-  async function handleFixNow(risk: FleetOverviewTopRisk) {
-    const key = `${risk.tenant_id}:${risk.control_id}:${risk.resource_id}`;
-    setLoadingRiskKey(key);
-    try {
-      setActiveTenantId(risk.tenant_id);
-      if (OFFBOARDING_CONTROLS.has(risk.control_id)) {
-        const session = await ep.startGuidedOffboarding(risk.control_id, risk.resource_id);
-        router.push(`/offboarding/${session.session_id}`);
-      } else {
-        router.push(`/risk-feed?tenant_id=${risk.tenant_id}`);
-      }
-    } finally {
-      setLoadingRiskKey(null);
-    }
   }
 
   function handleTenantFindingAction(finding: ComplianceResult) {
     router.push(`/risk-feed?tenant_id=${tenantId ?? ""}`);
   }
 
-  const addTenantButton = (
+  const connectButton = (
     <Button
       variant="primary"
       size="sm"
       onClick={() => {
-        startMicrosoftOAuth("msp_connect");
+        startMicrosoftOAuth("smb_onboarding");
       }}
     >
-      Add Tenant
+      Connect Tenant
     </Button>
   );
 
-  if (!fleetQuery.loading && !fleetQuery.error && tenants.length === 0) {
+  if (linkedTenants.length === 0) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Dashboard" subtitle="No tenants connected yet" actions={addTenantButton} />
+        <PageHeader title="Dashboard" subtitle="No tenant connected yet" actions={connectButton} />
         <Card className="p-10">
           <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-            <p className="text-lg text-gray-300">No tenants connected</p>
-            <p className="mt-2 text-sm">
-              Connect your first Microsoft tenant to start scanning posture data.
-            </p>
-            <div className="mt-5">{addTenantButton}</div>
+            <p className="text-lg text-gray-300">No tenant connected</p>
+            <p className="mt-2 text-sm">Connect your Microsoft tenant to start scanning posture data.</p>
+            <div className="mt-5">{connectButton}</div>
           </div>
         </Card>
       </div>
@@ -176,21 +134,12 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        subtitle={
-          activeTenant
-            ? isSmb
-              ? `${activeTenant.tenant_name} is ready for review`
-              : `${activeTenant.tenant_name} is selected for review`
-            : `${aggregate?.tenant_count ?? linkedTenants.length} tenants across your MSP fleet`
-        }
+        subtitle={activeTenant ? `${activeTenant.tenant_name} is ready for review` : "Select a tenant"}
         actions={
-          <>
-            <Button variant="secondary" size="sm" onClick={refetchFleet}>
-              <RefreshCw size={13} className={fleetQuery.loading ? "animate-spin" : ""} />
-              Refresh
-            </Button>
-            {!isSmb ? addTenantButton : null}
-          </>
+          <Button variant="secondary" size="sm" onClick={refetchAll}>
+            <RefreshCw size={13} className={overviewQuery.loading ? "animate-spin" : ""} />
+            Refresh
+          </Button>
         }
       />
 
@@ -204,8 +153,8 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Posture Score — always visible once fleet data loads */}
-          {!fleetQuery.loading && activeTenantPosture ? (
+          {/* Posture Score — visible once the overview loads */}
+          {!overviewQuery.loading && activeTenantPosture ? (
             <div className="border-b border-gray-800 px-5 py-4">
               <div className="flex items-center gap-4">
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-700 bg-gray-900/60 px-6 py-3 min-w-[96px]">
@@ -337,136 +286,7 @@ export default function DashboardPage() {
             </div>
           )}
         </Card>
-
-        {!isSmb ? (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-1">
-              <StatCard
-                label="Avg Risk Score"
-                value={fleetQuery.loading ? "-" : (aggregate?.avg_risk ?? 0)}
-                sub="across all tenants"
-                accent={scoreBandAccent(aggregate?.avg_risk_band ?? null)}
-                icon={<Shield size={18} />}
-              />
-              <StatCard
-                label="Total Critical Findings"
-                value={fleetQuery.loading ? "-" : (aggregate?.total_critical ?? 0)}
-                sub="priority issues requiring attention"
-                accent="text-red-400"
-                icon={<AlertTriangle size={18} />}
-              />
-              <StatCard
-                label="Total Tenants"
-                value={fleetQuery.loading ? "-" : (aggregate?.tenant_count ?? linkedTenants.length)}
-                sub="connected to this MSP account"
-                accent="text-cyan-400"
-                icon={<Building2 size={18} />}
-              />
-            </div>
-
-            <Card className="overflow-hidden">
-              <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
-                <div>
-                  <p className="text-sm font-semibold text-gray-200">Top Risks Across All Tenants</p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Critical findings are prioritized first across your MSP fleet.
-                  </p>
-                </div>
-              </div>
-
-              {fleetQuery.loading ? (
-                <div className="p-5">
-                  <TableSkeleton rows={5} cols={1} />
-                </div>
-              ) : fleetQuery.error ? (
-                <ErrorState message="Failed to load cross-tenant risks" />
-              ) : topRisks.length === 0 ? (
-                <EmptyState message="No open risks across connected tenants" />
-              ) : (
-                <div className="divide-y divide-gray-800/60">
-                  {topRisks.map((risk) => {
-                    const riskKey = `${risk.tenant_id}:${risk.control_id}:${risk.resource_id}`;
-                    return (
-                      <div
-                        key={riskKey}
-                        className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between"
-                      >
-                        <button
-                          type="button"
-                          className="min-w-0 text-left"
-                          onClick={() => handleFixNow(risk)}
-                        >
-                          <p className="text-sm font-semibold text-gray-100">{risk.title}</p>
-                          <p className="mt-1 text-xs text-gray-400">{risk.tenant_name}</p>
-                          <p className="mt-1 text-[11px] font-mono text-gray-500">{risk.resource_id}</p>
-                        </button>
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`text-xs font-semibold uppercase tracking-wider ${severityAccent(risk.severity)}`}
-                          >
-                            {risk.severity}
-                          </span>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            loading={loadingRiskKey === riskKey}
-                            onClick={() => handleFixNow(risk)}
-                          >
-                            <WandSparkles size={12} />{" "}
-                            {OFFBOARDING_CONTROLS.has(risk.control_id) ? "Offboard User" : "Fix in Findings"}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
-          </div>
-        ) : null}
       </div>
-
-      {!isSmb ? (
-        <Card className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-200">Tenant List</p>
-              <p className="mt-1 text-xs text-gray-500">
-                Click a tenant to drill into the detailed tenant dashboard.
-              </p>
-            </div>
-          </div>
-
-          {fleetQuery.loading ? (
-            <TableSkeleton rows={6} cols={1} />
-          ) : fleetQuery.error ? (
-            <ErrorState message="Failed to load fleet data" />
-          ) : tenants.length === 0 ? (
-            <div className="space-y-4">
-              <EmptyState message="No tenants connected" />
-              <div className="flex justify-center">{addTenantButton}</div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              {tenants.map((tenant) => (
-                <div key={tenant.tenant_id} className="space-y-3">
-                  <TenantCard
-                    tenant={tenant}
-                    onClick={() => {
-                      setActiveTenantId(tenant.tenant_id);
-                      router.push(`/tenants/${tenant.tenant_id}`);
-                    }}
-                  />
-                  <div className="flex items-center gap-2 text-sm text-cyan-300">
-                    <ShieldCheck size={14} />
-                    Open tenant dashboard
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      ) : null}
     </div>
   );
 }

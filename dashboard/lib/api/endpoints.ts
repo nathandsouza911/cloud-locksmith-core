@@ -1,6 +1,5 @@
 import { getApiBaseUrl, getSelectedTenantId, getToken } from "@/lib/auth";
 import { ApiError, api } from "./client";
-import { fetchFleetOverview } from "./msp";
 import type {
   ArchivedReportResponse,
   AttestationResponse,
@@ -11,7 +10,7 @@ import type {
   EligibilityResponse,
   EvidenceReport,
   ExecutiveSummary,
-  FleetPostureResponse,
+  OverviewResponse,
   RemediationAuditEvent,
   RemediationDecision,
   RemediationDecisionStats,
@@ -53,7 +52,6 @@ import type {
   WorkflowReviewResponse,
   WorkflowRun,
 } from "@/types/workflow";
-import type { TimelineQueryParams, TimelineResponse } from "@/types/timeline";
 
 export const login = (email: string, password: string) =>
   api.post<{ access_token: string }>("/api/auth/login", { email, password });
@@ -71,7 +69,6 @@ export const signup = (email: string, password: string, name: string) =>
 export const getMyTenants = () => api.get<UserTenantAccessItem[]>("/api/v1/tenants/my");
 
 export interface SessionContext {
-  mode: "SMB" | "MSP";
   tenant_id: string | null;
   role: string;
   is_preview: boolean;
@@ -85,9 +82,7 @@ export const deleteTenant = (tenantId: string) =>
     confirmation: "DELETE",
   });
 
-export const getFleetPosture = () => api.get<FleetPostureResponse>("/api/v1/fleet/posture");
-
-export const getFleetOverview = () => fetchFleetOverview();
+export const getOverview = () => api.get<OverviewResponse>("/api/v1/overview");
 
 export const getRiskFeed = () => api.get<RiskFeedItem[]>("/api/v1/risk-feed");
 
@@ -442,9 +437,6 @@ export const createBaselineTemplate = (baselineName: string, controls: string[])
     controls,
   });
 
-export const createMspBaseline = (_organizationId: string, baselineName: string, controls: string[]) =>
-  createBaselineTemplate(baselineName, controls);
-
 export const startGuidedOffboarding = (controlId: string, resourceId: string) =>
   api.post<Pick<OffboardingSession, "session_id" | "steps" | "status">>("/api/v1/offboarding/start", {
     control_id: controlId,
@@ -615,33 +607,8 @@ export const getActiveRuns = () => api.get<{ runs: WorkflowRun[] }>("/api/v1/wor
 export const patchRunState = (runId: string, payload: RunStateChangePayload) =>
   api.patch<WorkflowRun>(`/api/v1/workflows/runs/${encodeURIComponent(runId)}/state`, payload);
 
-// ─── Client timeline (Sprint 3) ──────────────────────────────────────────────
-// Read-only, merged, chronological history for a tenant. `since`/`until` are
-// ISO datetimes and MUST be URL-encoded — an unencoded "+00:00" offset decodes
-// as a space server-side and 422s. URLSearchParams handles this correctly.
-
 // OAuth Review's dedicated endpoints were retired in Wave 2. It is served by
 // the generic workflow review surface above, under the key "oauth-review".
-
-export const getClientTimeline = (tenantId: string, params?: TimelineQueryParams) => {
-  const searchParams = new URLSearchParams();
-  if (params?.limit != null) searchParams.append("limit", String(params.limit));
-  if (params?.cursor) searchParams.append("cursor", params.cursor);
-  if (params?.workflow_id) searchParams.append("workflow_id", params.workflow_id);
-  if (params?.event_types) {
-    for (const eventType of params.event_types) {
-      searchParams.append("event_types", eventType);
-    }
-  }
-  if (params?.since) searchParams.append("since", params.since);
-  if (params?.until) searchParams.append("until", params.until);
-
-  const queryString = searchParams.toString();
-  const path = `/api/v1/clients/${encodeURIComponent(tenantId)}/timeline${
-    queryString ? `?${queryString}` : ""
-  }`;
-  return api.get<TimelineResponse>(path);
-};
 
 // ─── Generic workflow review (Wave 2) ────────────────────────────────────────
 // One surface for every workflow. The tenant is resolved server-side from the

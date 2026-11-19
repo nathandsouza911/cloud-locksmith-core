@@ -1,7 +1,6 @@
 "use client";
 
-import type { FindingGuidance, FleetOverviewTenant } from "@/types";
-import { scoreBandAccent, scoreBandLabel } from "@/utils/posture";
+import type { FindingGuidance } from "@/types";
 
 function isRenderablePrimitive(value: unknown): value is string | number {
   return typeof value === "string" || typeof value === "number";
@@ -90,53 +89,5 @@ export function FindingGuidanceCard({ guidance }: { guidance?: string | FindingG
       </div>
       {renderManualSteps(guidance?.manual_steps)}
     </div>
-  );
-}
-
-function formatLastScan(value: string | null) {
-  if (!value) return "No scans yet";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No scans yet";
-  return date.toLocaleString();
-}
-
-export function TenantCard({ tenant, onClick }: { tenant: FleetOverviewTenant; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className="rounded-2xl border border-gray-800 bg-gray-900/70 p-5 text-left transition hover:border-cyan-500/40 hover:bg-gray-900"
-      onClick={onClick}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-lg font-semibold text-gray-100">{tenant?.tenant_name ?? "Unknown tenant"}</p>
-          <p className="mt-1 text-xs font-mono text-gray-500">{tenant?.tenant_id ?? "—"}</p>
-        </div>
-        <div className={`text-sm font-semibold ${scoreBandAccent(tenant?.risk_score_band ?? null)}`}>
-          {scoreBandLabel(tenant?.risk_score_band ?? null)}
-        </div>
-      </div>
-
-      <div className="mt-5 grid grid-cols-2 gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-gray-500">Risk Score</p>
-          <p className={`mt-1 text-2xl font-bold ${scoreBandAccent(tenant?.risk_score_band ?? null)}`}>
-            {tenant?.risk_score ?? 0}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-wide text-gray-500">Critical Findings</p>
-          <p className="mt-1 text-2xl font-bold text-red-400">{tenant?.critical_findings ?? 0}</p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-wide text-gray-500">MFA Coverage</p>
-          <p className="mt-1 text-xl font-semibold text-cyan-300">{tenant?.mfa_coverage ?? 0}%</p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-wide text-gray-500">Last Scan</p>
-          <p className="mt-1 text-sm text-gray-300">{formatLastScan(tenant?.last_scan ?? null)}</p>
-        </div>
-      </div>
-    </button>
   );
 }

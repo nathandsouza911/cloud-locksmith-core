@@ -20,13 +20,11 @@ import {
   ShieldHalf,
   AlertTriangle,
   Activity,
-  BarChart3,
   BookOpen,
   Building2,
   ClipboardList,
   FileBarChart2,
   KeyRound,
-  Layers,
   LayoutDashboard,
   Library,
   MessageSquare,
@@ -48,7 +46,7 @@ interface HelpSection {
   title: string;
   icon: LucideIcon;
   path?: string; // sidebar destination, when this section is a real page
-  audience?: string; // e.g. "MSP mode only"
+  audience?: string; // e.g. "Requires Entra ID P2"
   purpose: string;
   actions?: string[];
   note?: string;
@@ -100,10 +98,10 @@ const GROUPS: HelpGroup[] = [
       },
       {
         id: "concept-tenants",
-        title: "Clients, tenants, and MSP mode",
+        title: "Your tenant",
         icon: Building2,
         purpose:
-          "A \"tenant\" is one client's Microsoft 365 environment. If your account manages more than one client, you're in MSP mode and see a tenant switcher plus MSP-only sections (Campaigns, Operations, Clients, Fleet Report). A single-business account (SMB mode) sees only its own tenant and those sections are hidden.",
+          'A "tenant" is your organisation\'s Microsoft 365 environment. Cloud Locksmith works on one tenant: the one you signed in with. If you can reach more than one (for example a read-only preview plus your own), a tenant switcher appears at the top of the sidebar.',
       },
     ],
   },
@@ -116,7 +114,7 @@ const GROUPS: HelpGroup[] = [
         icon: ClipboardList,
         path: "/work",
         purpose:
-          "The landing screen — a prioritized list of everything outstanding for the selected client, pulled across every workflow at once.",
+          "The landing screen — a prioritized list of everything outstanding for the selected tenant, pulled across every workflow at once.",
         actions: ["Click Review on any card to open that workflow's review screen."],
       },
       {
@@ -145,9 +143,9 @@ const GROUPS: HelpGroup[] = [
         icon: Zap,
         path: "/risk-feed",
         purpose:
-          "A cross-tenant, real-time list of open findings, for triaging across clients rather than one workflow at a time.",
+          "A real-time list of the tenant's open findings, for triaging across every control rather than one workflow at a time.",
         actions: [
-          "Filter by tenant and severity.",
+          "Filter by severity.",
           "Approve a finding, or Fix Now / Execute / Retry to remediate it directly.",
           "Simulate Fix to preview a Conditional Access change before applying it.",
           "Mark as Authorized to acknowledge expected break-glass account usage.",
@@ -155,49 +153,11 @@ const GROUPS: HelpGroup[] = [
         ],
         note: "Some fixes require an Entra ID P1/P2 license.",
       },
-      {
-        id: "campaigns",
-        title: "Campaigns",
-        icon: Layers,
-        path: "/campaigns",
-        audience: "MSP mode only",
-        purpose:
-          "Bulk remediation across many client tenants at once, for a small, deliberately conservative set of low-risk controls.",
-        actions: [
-          "New Campaign — choose controls and target tenants, optionally toggle Dry Run first.",
-          "On a campaign: Approve, Execute (typed confirmation), Rollback, or Export CSV / Export PDF.",
-        ],
-        note: "Only three controls are offered here on purpose: unused accounts, open guest invitations, and user consent policy — the ones safe enough to touch across a whole fleet at once.",
-      },
-      {
-        id: "operations",
-        title: "Operations",
-        icon: Activity,
-        path: "/operations/live",
-        audience: "MSP mode only",
-        purpose:
-          "A live, auto-refreshing view of campaign execution, scheduled jobs, and drift across every client — for watching, not clicking.",
-      },
     ],
   },
   {
-    label: "Clients",
+    label: "Tenant",
     sections: [
-      {
-        id: "clients",
-        title: "Clients",
-        icon: Building2,
-        path: "/tenants",
-        audience: "MSP mode only",
-        purpose: "Manage the list of connected client tenants.",
-        actions: [
-          "Add Tenant to start Microsoft admin-consent onboarding for a new client.",
-          "Scan All Tenants, or Scan Now on one tenant.",
-          "Switch to change which tenant the rest of the app is scoped to.",
-          "Reconnect if a client's connection needs re-authorizing.",
-          "Delete — type DELETE to confirm. Only available to account owners/admins.",
-        ],
-      },
       {
         id: "users",
         title: "Users",
@@ -262,15 +222,6 @@ const GROUPS: HelpGroup[] = [
         ],
       },
       {
-        id: "fleet-report",
-        title: "Fleet Report",
-        icon: BarChart3,
-        path: "/fleet-report",
-        audience: "MSP mode only",
-        purpose: "Ranks every client tenant by posture score and trend, in one list.",
-        actions: ["Click a tenant to open it in Clients."],
-      },
-      {
         id: "compliance",
         title: "Compliance",
         icon: ShieldCheck,
@@ -295,15 +246,19 @@ const GROUPS: HelpGroup[] = [
     ],
   },
   {
-    label: "Fleet",
+    label: "Posture",
     sections: [
       {
         id: "dashboard",
         title: "Dashboard",
         icon: LayoutDashboard,
         path: "/dashboard",
-        purpose: "A posture overview — fleet-wide for MSP accounts, single-tenant for SMB accounts.",
-        actions: ["Add Tenant.", "Refresh.", "Fix or Review on any listed finding."],
+        purpose: "A posture overview of your tenant: score, open issues by severity, and the top findings.",
+        actions: [
+          "Connect Tenant (before the first sign-in completes).",
+          "Refresh.",
+          "Fix or Review on any listed finding.",
+        ],
       },
       {
         id: "attack-paths",

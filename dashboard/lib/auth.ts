@@ -78,7 +78,7 @@ export function getMicrosoftConnectUrl(): string {
   return `${apiUrl}/api/v1/auth/microsoft/start`;
 }
 
-export type MicrosoftOAuthIntent = "smb_onboarding" | "msp_connect" | "preview" | "cost_checker";
+export type MicrosoftOAuthIntent = "smb_onboarding" | "preview" | "cost_checker";
 
 export interface MicrosoftOAuthOptions {
   /** Tenant hint forwarded to Microsoft's authorize endpoint and validated in the callback. */

@@ -32,10 +32,17 @@ jest.mock("lucide-react", () => {
 
 import HelpPage from "../page";
 
+it("has no sections for the removed MSP pages", () => {
+  render(<HelpPage />);
+  for (const title of ["Campaigns", "Operations", "Clients", "Fleet Report"]) {
+    expect(screen.queryByRole("heading", { name: title })).not.toBeInTheDocument();
+  }
+});
+
 it("lists every nav-mapped section with a working sidebar path", () => {
   render(<HelpPage />);
   // Spot-check a section from each real nav group renders as a heading.
-  for (const title of ["My Work", "Risk Feed", "Clients", "Reports", "Security Baselines", "Settings"]) {
+  for (const title of ["My Work", "Risk Feed", "Users", "Reports", "Security Baselines", "Settings"]) {
     expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
   }
 });
@@ -53,12 +60,12 @@ it("flags the Remediation Timeline export button as not wired up", () => {
 
 it("search narrows the page to matching topics only", async () => {
   render(<HelpPage />);
-  expect(screen.getByRole("heading", { name: "Campaigns" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Attack Paths" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
 
-  await userEvent.type(screen.getByPlaceholderText(/search help topics/i), "campaign");
+  await userEvent.type(screen.getByPlaceholderText(/search help topics/i), "breach scenarios");
 
-  expect(screen.getByRole("heading", { name: "Campaigns" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Attack Paths" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Settings" })).not.toBeInTheDocument();
 });
 

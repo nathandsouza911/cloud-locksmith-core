@@ -9,7 +9,6 @@ export interface UserTenantAccessItem {
   tenant_id: string;
   tenant_name: string;
   role: string;
-  account_type?: "SMB" | "MSP";
   status?: "Connected" | "Needs Re-auth";
   needs_reauth?: boolean;
   last_token_refresh?: string | null;
@@ -110,27 +109,7 @@ export type ControlCapabilityMap = Record<string, ControlCapabilityDecision>;
 
 // ─── Fleet ───────────────────────────────────────────────────────────────────
 
-export interface FleetTenantPosture {
-  tenant_id: string;
-  tenant_name: string;
-  posture_score: number | null;
-  score_band?: ScoreBand | null;
-  failed_controls: number;
-  has_snapshot: boolean;
-  status: "Active" | "Awaiting scan";
-  latest_snapshot_at?: string | null;
-  score_delta_7d?: number | null;
-  percentile?: number | null;
-  relative_position?: string | null;
-}
-
-export interface FleetPostureResponse {
-  tenants: FleetTenantPosture[];
-  fleet_avg_score?: number | null;
-  fleet_size?: number;
-}
-
-export interface FleetOverviewTenant {
+export interface OverviewTenant {
   tenant_id: string;
   tenant_name: string;
   risk_score: number | null;
@@ -140,14 +119,14 @@ export interface FleetOverviewTenant {
   last_scan: string | null;
 }
 
-export interface FleetOverviewAggregate {
+export interface OverviewAggregate {
   avg_risk: number;
   avg_risk_band?: ScoreBand | null;
   total_critical: number;
   tenant_count: number;
 }
 
-export interface FleetOverviewTopRisk {
+export interface OverviewTopRisk {
   tenant_id: string;
   tenant_name: string;
   control_id: string;
@@ -156,10 +135,10 @@ export interface FleetOverviewTopRisk {
   title: string;
 }
 
-export interface FleetOverviewResponse {
-  tenants: FleetOverviewTenant[];
-  aggregate: FleetOverviewAggregate;
-  top_risks: FleetOverviewTopRisk[];
+export interface OverviewResponse {
+  tenants: OverviewTenant[];
+  aggregate: OverviewAggregate;
+  top_risks: OverviewTopRisk[];
 }
 
 // ─── Risk Feed ────────────────────────────────────────────────────────────────

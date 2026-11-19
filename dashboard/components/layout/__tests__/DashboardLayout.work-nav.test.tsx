@@ -2,7 +2,7 @@
  * Sprint 1 — navigation becomes work-first.
  *
  * Product Bible §13/§14: users navigate by work, not by data. "My Work" is the
- * primary destination; the posture Dashboard is demoted under Fleet rather than
+ * primary destination; the posture Dashboard is demoted under Posture rather than
  * removed.
  */
 
@@ -42,7 +42,6 @@ jest.mock("@/lib/auth-context", () => ({
     tenants: [{ tenant_id: "tenant-1", tenant_name: "Contoso", role: "admin" }],
     selectedTenant: { tenant_id: "tenant-1", tenant_name: "Contoso" },
     requiresTenantSelection: false,
-    isSmb: false,
     isPreviewMode: false,
     setActiveTenantId: jest.fn(),
     logout: jest.fn(),
@@ -84,19 +83,19 @@ test("the posture dashboard is not removed", () => {
   expect(navHrefs(container)).toContain("/dashboard");
 });
 
-test("nav is organised by work, with a Work group before a Fleet group", () => {
+test("nav is organised by work, with a Work group before a Posture group", () => {
   renderNav();
   const labels = screen.getAllByTestId("nav-group-label").map((node) => node.textContent);
 
   expect(labels).toContain("Work");
-  expect(labels).toContain("Fleet");
-  expect(labels.indexOf("Work")).toBeLessThan(labels.indexOf("Fleet"));
+  expect(labels).toContain("Posture");
+  expect(labels.indexOf("Work")).toBeLessThan(labels.indexOf("Posture"));
 });
 
-test("Dashboard is grouped under Fleet, not under the work group", () => {
+test("Dashboard is grouped under Posture, not under the work group", () => {
   const { container } = renderNav();
   const fleetGroup = Array.from(container.querySelectorAll("[data-nav-group]")).find(
-    (node) => node.getAttribute("data-nav-group") === "Fleet",
+    (node) => node.getAttribute("data-nav-group") === "Posture",
   );
 
   expect(fleetGroup).toBeTruthy();
