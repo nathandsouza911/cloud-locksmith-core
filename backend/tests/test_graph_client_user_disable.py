@@ -162,7 +162,7 @@ def test_disable_fallback_updates_stale_user_references(monkeypatch, db_session)
     )
     patched_paths: list[str] = []
 
-    async def fake_graph_get_with_token(access_token: str, path: str):
+    async def fake_graph_get_with_token(access_token: str, path: str, *, expected_tenant_id=None):
         if path.startswith("/users/stale-user-id?"):
             raise GraphAPIError(
                 method="GET",
@@ -231,7 +231,7 @@ def test_disable_uses_tenant_scoped_token(monkeypatch, db_session):
         assert current_tenant == tenant.id
         return token
 
-    async def fake_graph_get_with_token(access_token: str, path: str):
+    async def fake_graph_get_with_token(access_token: str, path: str, *, expected_tenant_id=None):
         assert access_token == token
         if path.startswith("/users/user-tenant?"):
             return {
@@ -275,7 +275,7 @@ def test_disable_raises_user_not_found_when_lookup_and_fallback_fail(monkeypatch
         }
     )
 
-    async def fake_graph_get_with_token(access_token: str, path: str):
+    async def fake_graph_get_with_token(access_token: str, path: str, *, expected_tenant_id=None):
         if path.startswith("/users/missing-user?"):
             raise GraphAPIError(
                 method="GET",

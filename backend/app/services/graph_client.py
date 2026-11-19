@@ -519,7 +519,7 @@ async def fetch_user_memberof_directory_roles(
     pass raise_on_error=True wherever "no roles" would allow a change (offboarding)."""
     path = f"/users/{user_id}/memberOf"
     try:
-        payload = await graph_get(db, tenant, path)
+        payload = {"value": await graph_get_all(db, tenant, path)}
         return _normalize_memberof_directory_roles(payload)
     except Exception as exc:
         logger.warning(
@@ -532,7 +532,7 @@ async def fetch_user_memberof_directory_roles(
             },
         )
         try:
-            payload = await graph_get(db, tenant, path)
+            payload = {"value": await graph_get_all(db, tenant, path)}
             return _normalize_memberof_directory_roles(payload)
         except Exception:
             if raise_on_error:
@@ -545,7 +545,9 @@ async def get_user_directory_roles_with_token(
     access_token: str,
     user_id: str,
 ) -> list[dict[str, Any]]:
-    payload = await graph_get_with_token(access_token, f"/users/{user_id}/memberOf")
+    # Every page: a user in many groups can have a role on a later page, and
+    # missing it would let the privileged-user safeguard pass.
+    payload = {"value": await graph_get_all_with_token(access_token, f"/users/{user_id}/memberOf")}
     member_of = _normalize_memberof_directory_roles(payload)
     return [
         {
@@ -830,6 +832,22 @@ async def graph_get_with_token(
             access_token=access_token,
         )
     return response.json() if response.text else {}
+
+
+async def graph_get_all_with_token(
+    access_token: str,
+    path: str,
+    *,
+    expected_tenant_id: str | None = None,
+) -> list[dict]:
+    """Every page of a collection read with an explicit token."""
+    results: list[dict] = []
+    next_path: str | None = path
+    while next_path:
+        page = await graph_get_with_token(access_token, next_path, expected_tenant_id=expected_tenant_id)
+        results.extend(page.get("value", []))
+        next_path = page.get("@odata.nextLink")
+    return results
 
 
 async def graph_get_all(db, tenant, path: str):

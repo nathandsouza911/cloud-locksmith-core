@@ -84,11 +84,8 @@ def extract_directory_roles(
 
 
 async def load_overprivileged_role_evidence(*, db, tenant, user_id: str) -> dict:
-    raw_memberof = await graph_client.graph_get(
-        db,
-        tenant,
-        f"/users/{user_id}/memberOf",
-    )
+    # Every page: a user in many groups can have a role on a later page.
+    raw_memberof = {"value": await graph_client.graph_get_all(db, tenant, f"/users/{user_id}/memberOf")}
     current_roles, available_roles = extract_directory_roles(
         raw_memberof,
         user_id=user_id,
