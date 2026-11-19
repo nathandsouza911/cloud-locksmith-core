@@ -103,8 +103,9 @@ Auto-executed fixes can act on findings that nobody approved. Leave
 
 ## Settings that are not safety switches
 
-`REMEDIATION_DRY_RUN` (default true) is only read by a startup warning. It does **not**
-stop remediations. Do not rely on it.
+`REMEDIATION_DRY_RUN` (default true) is not read by anything. It does **not** stop
+remediations. Do not rely on it. (Before 0.2.0 it only drove a startup log line that
+wrongly said remediations would not be applied; that line is gone.)
 
 ## Audit
 

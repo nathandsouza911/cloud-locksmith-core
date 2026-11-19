@@ -108,14 +108,15 @@
   Exclusions such as break-glass accounts are still allowed. Policies created by Apply
   include all users and still pass.
 
+* **Removed a misleading startup warning.** In production mode (which the one-command setup
+  uses) the API logged `REMEDIATION_DRY_RUN=True ... remediations will NOT be applied`, and
+  outside production it logged the opposite when the setting was false. The setting is read
+  by nothing and stops no remediation, so both lines were wrong. They are gone and the
+  setting is documented as inert. Auto-remediation is controlled by `ENABLE_AUTO_REMEDIATION`
+  (off in the generated config); with it off, a fix executes only after an approval.
+
 ### Known issues in 0.2.0
 
-* **The startup warning about `REMEDIATION_DRY_RUN` is misleading.** In production mode (which
-  the one-command setup uses) the API logs `REMEDIATION_DRY_RUN=True ... remediations will NOT
-  be applied`. That setting is only read by this warning and does not stop anything;
-  `docs/remediation-lifecycle.md` says so. Auto-remediation is controlled by
-  `ENABLE_AUTO_REMEDIATION` (off in the generated config), and every executed fix needs an
-  approval. Do not rely on the log line.
 * **Mail-forwarding rules are not checked for some users.** In a live scan of one small tenant,
   the per-mailbox fetch failed for 6 to 7 users (`mail_forwarding_rule_fetch_failed`,
   `GraphAPIError`), including after `MailboxSettings.Read` was consented. The scan skips those
