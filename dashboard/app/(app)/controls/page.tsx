@@ -14,7 +14,11 @@ import {
   TableSkeleton,
 } from "@/components/ui";
 import * as ep from "@/lib/api/endpoints";
-import { executionSucceeded, normalizeExecuteFailureMessage } from "@/lib/remediation-result";
+import {
+  executionAlreadyDone,
+  executionSucceeded,
+  normalizeExecuteFailureMessage,
+} from "@/lib/remediation-result";
 import { resolveControlCapabilityWithFallback } from "@/lib/control-capabilities";
 import {
   buildControlButtonState,
@@ -340,6 +344,15 @@ export default function ControlsPage() {
       }
 
       // The endpoint answers 200 even when the fix did not apply; the body decides.
+      if (executionAlreadyDone(result)) {
+        setActionStateByControl((current) => ({
+          ...current,
+          [controlId]: { loading: false, label: "Already compliant" },
+        }));
+        complianceQuery.refetch();
+        return;
+      }
+
       if (!executionSucceeded(result)) {
         const label =
           isCaControl(controlId) && (result.status === "blocked" || result.status === "partial")

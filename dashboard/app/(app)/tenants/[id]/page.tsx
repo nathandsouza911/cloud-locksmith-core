@@ -31,7 +31,11 @@ import { useExecutiveSummary, usePostureTrend, useComplianceResults } from "@/li
 import { useAuth } from "@/lib/auth-context";
 import type { Severity, DecisionStatus } from "@/types";
 import * as ep from "@/lib/api/endpoints";
-import { executionSucceeded, normalizeExecuteFailureMessage } from "@/lib/remediation-result";
+import {
+  executionAlreadyDone,
+  executionSucceeded,
+  normalizeExecuteFailureMessage,
+} from "@/lib/remediation-result";
 import { scoreBandAccent } from "@/utils/posture";
 
 const SEVERITY_ORDER: Severity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
@@ -344,7 +348,10 @@ export default function TenantDetailPage({ params }: { params: { id: string } })
                                     ep
                                       .executeRemediation(String(r.id), tenantId)
                                       .then((response) => {
-                                        if (!executionSucceeded(response)) {
+                                        if (
+                                          !executionSucceeded(response) &&
+                                          !executionAlreadyDone(response)
+                                        ) {
                                           setExecuteError(
                                             normalizeExecuteFailureMessage(
                                               response.status,

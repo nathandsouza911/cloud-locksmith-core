@@ -19,7 +19,11 @@ import { Button, Card, ErrorState, PageHeader, TableSkeleton } from "@/component
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { RunProgress } from "@/components/workflow/RunProgress";
 import { ResourceList } from "@/components/workflow/ResourceList";
-import { executionSucceeded, normalizeExecuteFailureMessage } from "@/lib/remediation-result";
+import {
+  executionAlreadyDone,
+  executionSucceeded,
+  normalizeExecuteFailureMessage,
+} from "@/lib/remediation-result";
 import { useWorkflowReview } from "@/lib/api/hooks";
 import {
   completeWorkflowReview,
@@ -115,7 +119,9 @@ export function WorkflowReviewPage({ workflowKey, renderResourceDetail, resource
       });
       setPending(null);
       // The backend answers 200 even when an execution did not apply.
-      const failed = (response.executions ?? []).filter((execution) => !executionSucceeded(execution));
+      const failed = (response.executions ?? []).filter(
+        (execution) => !executionSucceeded(execution) && !executionAlreadyDone(execution),
+      );
       if (failed.length > 0) {
         setActionError(
           `Remediation did not apply for: ${failed

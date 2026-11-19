@@ -1,4 +1,8 @@
-import { executionSucceeded, normalizeExecuteFailureMessage } from "../remediation-result";
+import {
+  executionAlreadyDone,
+  executionSucceeded,
+  normalizeExecuteFailureMessage,
+} from "../remediation-result";
 
 describe("executionSucceeded", () => {
   it.each([
@@ -28,5 +32,18 @@ describe("normalizeExecuteFailureMessage", () => {
     expect(normalizeExecuteFailureMessage("failed", "R")).toBe("Execution failed: R");
     expect(normalizeExecuteFailureMessage("failed")).toBe("Execution failed: failed");
     expect(normalizeExecuteFailureMessage()).toBe("Execution failed");
+  });
+});
+
+describe("executionAlreadyDone", () => {
+  it.each([
+    [{ status: "already_compliant" }, true],
+    [{ status: "ALREADY_RESOLVED" }, true],
+    [{ status: "success" }, false],
+    [{ status: "failed" }, false],
+    [null, false],
+    [undefined, false],
+  ])("%j -> %s", (response, expected) => {
+    expect(executionAlreadyDone(response as never)).toBe(expected);
   });
 });

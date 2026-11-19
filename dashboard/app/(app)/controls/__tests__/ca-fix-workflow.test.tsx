@@ -107,3 +107,12 @@ it("shows a failure, not 'Applied and Verified', when execute resolves with stat
   expect(await screen.findByText("Execution failed: GRAPH_ERROR")).toBeInTheDocument();
   expect(screen.queryByText("Applied and Verified")).not.toBeInTheDocument();
 });
+
+it("shows 'Already compliant' when execute reports there was nothing to fix", async () => {
+  mocked.executeRemediation.mockResolvedValue({ status: "already_compliant" });
+  await reviewAndFixLegacyAuth();
+
+  await waitFor(() => expect(mocked.executeRemediation).toHaveBeenCalled());
+  expect(await screen.findByText("Already compliant")).toBeInTheDocument();
+  expect(screen.queryByText(/Execution failed/)).not.toBeInTheDocument();
+});

@@ -80,3 +80,10 @@ it("refetches without an error on success", async () => {
   await waitFor(() => expect(mockRefetch).toHaveBeenCalled());
   expect(screen.queryByText(/Execution failed/)).not.toBeInTheDocument();
 });
+
+it.each(["already_compliant", "already_resolved"])("treats %s as no error and refetches", async (status) => {
+  mocked.executeRemediation.mockResolvedValue({ status });
+  await clickExecute();
+  await waitFor(() => expect(mockRefetch).toHaveBeenCalled());
+  expect(screen.queryByText(/Execution failed/)).not.toBeInTheDocument();
+});

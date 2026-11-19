@@ -15,6 +15,14 @@ export function executionSucceeded(
   );
 }
 
+/** Nothing to fix: the finding was already compliant or resolved. Not a failure. */
+export function executionAlreadyDone(
+  response: Pick<ExecuteRemediationResponse, "status"> | null | undefined,
+): boolean {
+  const status = response?.status?.toLowerCase();
+  return status === "already_compliant" || status === "already_resolved";
+}
+
 export function normalizeExecuteFailureMessage(status?: string, reason?: string, message?: string): string {
   if (reason === "NO_ROLES_SELECTED") return "Execution failed: no roles selected";
   if (message) return message;
