@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+* **The MSP / fleet / campaign surface is removed.** Each account now works on one tenant.
+  Gone: the `msp_connect` sign-in (and its pending/confirm routes), `/api/v1/msp/*`,
+  `/api/v1/fleet/*`, `/api/v1/campaigns*`, `/api/v1/clients/*`, the campaign scheduler
+  and jobs, and the Campaigns, Operations, Clients, Fleet Report and `/msp/*` pages. The
+  last version with them is tagged `archive/msp-fleet-campaigns`.
+  * Migration `20261120_drop_campaigns` drops the six campaign tables, deletes every
+    `MSP_MANAGER` tenant-access row (so no access outlives the feature that granted it)
+    and deletes pending `msp_connect` OAuth sessions, which held an encrypted refresh
+    token that was never purged. Downgrade recreates the tables empty.
+  * The home dashboard reads `GET /api/v1/overview`, scoped to the session tenant (the
+    fleet overview summed every tenant the user could reach). A result that was not
+    evaluated no longer counts as a failure there.
+  * Re-authorizing (Settings) uses the normal sign-in. Sign-in errors land on Settings
+    and show fixed text per error code, never the message from the URL.
+  * Security baselines stay: they are the list of controls in scope for scoring,
+    reports and auto-remediation.
+
 * The `evidence_fingerprint_allowlist_unmatched` warning is gone for the three controls that
   logged it. `IDENTITY_USER_CONSENT_POLICY` and `IDENTITY_GUEST_INVITES_OPEN` now declare the
   keys their detector emits (the fingerprint is unchanged: it already hashed the whole payload

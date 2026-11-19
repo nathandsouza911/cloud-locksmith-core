@@ -1,7 +1,8 @@
 # Connect a real tenant
 
 This is the manual path: you register the Entra app and write the configuration
-yourself. It supports several tenants (an MSP). For one tenant on one machine,
+yourself. It accepts sign-ins from any tenant, and each tenant is owned by the admin
+who connected it; one account cannot manage several tenants. For one tenant on one machine,
 [`deploy/README.md`](../deploy/README.md) does the app registration and configuration
 with one command. Start with a test or developer tenant.
 

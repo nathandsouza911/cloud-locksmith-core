@@ -2,8 +2,8 @@
 
 Cloud Locksmith Core scans Microsoft 365 / Entra ID tenants for identity and Conditional
 Access misconfigurations, scores the tenant's posture, and fixes findings through an
-approval-gated workflow with verification and rollback. It is multi-tenant, so an MSP can
-run it across client tenants.
+approval-gated workflow with verification and rollback. Each account works on one
+Microsoft tenant: the one its owner signed in with.
 
 **Before connecting a real tenant, read [`docs/trust.md`](docs/trust.md)**: the scopes it
 requests (a full connect includes write scopes), what it stores, what it can change and
@@ -53,7 +53,7 @@ Stop it with `docker compose down` (add `-v` to delete the demo database).
 | Conditional Access coverage per user (MFA, legacy authentication, admin MFA, with the reason for each gap) | Implemented | Unit and Postgres integration tests, including cross-tenant cases; demo. Not yet run against a real tenant. |
 | Approval-gated fixes with preflight checks, verification and rollback (`docs/remediation-lifecycle.md`) | Implemented | Unit and Postgres integration tests. On a real developer tenant (2026-11-13): one Conditional Access fix (block legacy authentication, report-only) approved, executed, verified and rolled back twice, tenant restored; refusals checked (no break-glass account, expired approval, stale sign-in, concurrent execute). No enforced fix and no other fix has been run against a real tenant. |
 | Multi-tenant access control and tenant isolation | Implemented | Unit and Postgres integration tests, including cross-tenant cases |
-| MSP fleet view, baselines and campaigns | Implemented | Unit tests |
+| Security baselines (the controls in scope) | Implemented | Unit tests |
 | Evidence reports (PDF) | Implemented | Unit and integration tests, with PDF rendering stubbed |
 | OAuth app consent review workflow | Implemented | Unit tests |
 | Read-only demo mode with guards | Implemented | `backend/tests/test_demo_mode.py`; the demo stack was started and checked end to end (the CI workflow repeats that check) |
@@ -82,8 +82,7 @@ Use Chrome, Edge or Firefox. Until the `0.2.0` images are published, `docker com
 builds them from source, which takes several minutes. See [`deploy/README.md`](deploy/README.md)
 for requirements, upgrade, secret rotation, backup and uninstall.
 
-To connect several tenants (an MSP) or to register the app yourself, see
-`docs/connect-a-real-tenant.md`. Scopes are in `docs/permissions.md`.
+To register the app yourself, see `docs/connect-a-real-tenant.md`. Scopes are in `docs/permissions.md`.
 
 ## Docs
 

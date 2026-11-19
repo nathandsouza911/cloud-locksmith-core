@@ -7,7 +7,7 @@ browser ──> dashboard (Next.js 14, :3000) ──HTTPS/JSON + cookie──> a
                                      │                              │                     │
                               Postgres 15                      Redis 7            Microsoft Graph
                         (tenants, findings, audit,     (token denylist, rate      (delegated tokens
-                         snapshots, campaigns)          limits, lockout)            only; never in demo)
+                         snapshots, baselines)          limits, lockout)            only; never in demo)
 ```
 
 ## Components
@@ -16,9 +16,9 @@ browser ──> dashboard (Next.js 14, :3000) ──HTTPS/JSON + cookie──> a
 |---|---|
 | `backend/app/main.py` | FastAPI app, middleware, router registration, startup checks. |
 | `backend/app/api/` | HTTP routes (`routes/` and `v1/`). |
-| `backend/app/services/` | Scanning, scoring, remediation, rollback, verification, reports, MSP fleet. |
+| `backend/app/services/` | Scanning, scoring, remediation, rollback, verification, reports. |
 | `backend/app/services/remediation/control_registry.py` | The control catalogue: detector, executor, verifier, rollback per control (see `controls.md`). |
-| `backend/app/jobs/`, `backend/app/scheduler.py` | Background jobs (scans, reports, campaigns, auto-remediation). |
+| `backend/app/jobs/`, `backend/app/scheduler.py` | Background jobs (scans, reports, auto-remediation). |
 | `backend/app/demo/` | Demo mode (recorded scan, guards). |
 | `backend/alembic/` | Schema: one baseline (`20261110_baseline`) plus later revisions. |
 | `dashboard/` | Next.js dashboard (App Router). |
@@ -51,7 +51,7 @@ the `X-Tenant-ID` header is only a selector, never trusted on its own.
 ## Background work
 
 `ENABLE_SCHEDULER` defaults to **false**. When it is set to `true`, the API also runs the
-scheduler loop when it starts (scheduled scans, reports, campaign jobs and the
+scheduler loop when it starts (scheduled scans, reports and the
 auto-remediation job). The
 auto-remediation job does nothing unless `ENABLE_AUTO_REMEDIATION=true` (default false).
 See `remediation-lifecycle.md`.

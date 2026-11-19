@@ -5,7 +5,7 @@ setup script registers the Entra app for you and writes the configuration; you d
 copy any secret by hand. Read [`docs/trust.md`](../docs/trust.md) first: a full connect
 requests write scopes.
 
-For several tenants (an MSP), or to register the app yourself, use the manual path in
+To register the app yourself, use the manual path in
 [`docs/connect-a-real-tenant.md`](../docs/connect-a-real-tenant.md).
 
 ## Requirements
