@@ -14,7 +14,6 @@ from app.services.ca_policy_engine import (
     CONTROL_MFA_ADMINS,
     CONTROL_MFA_ALL_USERS,
     ControlEngineError,
-    _build_exclude_users_patch,
     apply_policies_bulk,
     build_policy,
     fetch_clx_policies,
@@ -78,13 +77,14 @@ class _FakePatchGraphClient(_FakeGraphClient):
         super().__init__(policies)
         self.patch_bodies: list[dict] = []
 
-    async def update_conditional_access_policy(self, policy_id: str, patch_body: dict):
+    async def patch_conditional_access_exclude_users(self, policy_id: str, exclude_users: list[str]):
+        patch_body = {"conditions": {"users": {"excludeUsers": list(exclude_users)}}}
         self.patch_bodies.append({"policy_id": policy_id, "patch": patch_body})
         for policy in self._policies:
             if policy.get("id") == policy_id:
                 users = policy.setdefault("conditions", {}).setdefault("users", {})
-                users["excludeUsers"] = patch_body["conditions"]["users"]["excludeUsers"]
-                return policy
+                users["excludeUsers"] = list(exclude_users)
+                return list(exclude_users)
         raise AssertionError(f"policy not found: {policy_id}")
 
 
@@ -760,16 +760,6 @@ def test_build_policy_rejects_break_glass_exclusion_control():
         assert "apply_break_glass_exclusion" in str(exc)
     else:
         raise AssertionError("Expected ControlEngineError for build_policy(CA_BREAK_GLASS_EXCLUSION)")
-
-
-def test_build_exclude_users_patch_only_touches_exclude_users():
-    patch_body = _build_exclude_users_patch(["bg-1", "bg-2", "bg-1"])
-    # Top-level body shape: {"conditions": {"users": {"excludeUsers": [...]}}}
-    assert set(patch_body.keys()) == {"conditions"}
-    assert set(patch_body["conditions"].keys()) == {"users"}
-    assert set(patch_body["conditions"]["users"].keys()) == {"excludeUsers"}
-    # Deduplication preserves order
-    assert patch_body["conditions"]["users"]["excludeUsers"] == ["bg-1", "bg-2"]
 
 
 def test_break_glass_rollback_preserves_newer_exclusions_and_verifies():

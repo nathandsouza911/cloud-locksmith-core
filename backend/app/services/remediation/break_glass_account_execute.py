@@ -258,7 +258,11 @@ class BreakGlassAccountExecutor:
             patched_policy, changed = _policy_with_excluded_users(policy, created_user_ids)
             if not changed:
                 continue
-            await graph_client.update_conditional_access_policy(policy_id, patched_policy)
+            # Only excludeUsers is written: re-sending the whole policy failed on
+            # session-only policies (grantControls null) after the accounts existed.
+            await graph_client.patch_conditional_access_exclude_users(
+                policy_id, list(patched_policy["conditions"]["users"]["excludeUsers"])
+            )
 
         tenant_asset_flags = dict(getattr(graph_client.tenant, "asset_flags", None) or {})
         tenant_asset_flags["break_glass_accounts"] = [

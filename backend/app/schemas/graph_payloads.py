@@ -1,6 +1,8 @@
 import logging
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, StringConstraints, ValidationError, model_validator
 from app.services.ca_policy_states import CA_POLICY_STATES
 
 logger = logging.getLogger(__name__)
@@ -65,6 +67,30 @@ class ConditionalAccessPolicySchema(BaseModel):
         if self.state not in CA_POLICY_STATES:
             raise ValueError("Conditional Access state must be enabled, disabled, or enabledForReportingButNotEnforced")
         return self
+
+
+class _ExcludeUsersOnly(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    excludeUsers: list[Annotated[StrictStr, StringConstraints(min_length=1)]]
+
+
+class _ExcludeUsersConditions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    users: _ExcludeUsersOnly
+
+
+class ConditionalAccessExcludeUsersPatchSchema(BaseModel):
+    """The only PATCH body for adding or restoring break-glass exclusions.
+
+    It can reach conditions.users.excludeUsers and nothing else. Graph merges a partial
+    conditions object on PATCH, so every other part of the policy stays as it is.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    conditions: _ExcludeUsersConditions
 
 
 class UserPatchSchema(BaseModel):

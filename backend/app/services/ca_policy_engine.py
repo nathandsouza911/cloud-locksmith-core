@@ -1476,24 +1476,11 @@ async def rollback_control(
 # break-glass exclusions. Operates on N policies, not a single CLX policy.
 # ---------------------------------------------------------------------------
 
-_BREAK_GLASS_EXCLUSION_ALLOWED_PATCH_KEY = "excludeUsers"
-
 
 def _missing_break_glass_ids(policy: dict, break_glass_ids: list[str]) -> list[str]:
     users = (policy.get("conditions") or {}).get("users") or {}
     excluded = set(users.get("excludeUsers") or [])
     return [bg_id for bg_id in break_glass_ids if bg_id not in excluded]
-
-
-def _build_exclude_users_patch(exclude_users: list[str]) -> dict:
-    """Build a PATCH body that ONLY touches conditions.users.excludeUsers."""
-    return {
-        "conditions": {
-            "users": {
-                _BREAK_GLASS_EXCLUSION_ALLOWED_PATCH_KEY: list(dict.fromkeys(exclude_users)),
-            }
-        }
-    }
 
 
 def _merge_break_glass_rollback_exclusions(
@@ -1641,8 +1628,8 @@ async def apply_break_glass_exclusion(
                     continue
                 live_exclude = list(((live.get("conditions") or {}).get("users") or {}).get("excludeUsers") or [])
                 merged = list(dict.fromkeys(live_exclude + break_glass_ids))
-                patch_body = _build_exclude_users_patch(merged)
-                await graph_client.update_conditional_access_policy(policy_id, patch_body)
+                # Only conditions.users.excludeUsers can be written (provider schema).
+                await graph_client.patch_conditional_access_exclude_users(policy_id, merged)
                 patched.append(
                     {
                         "policy_id": policy_id,
@@ -1782,11 +1769,13 @@ async def rollback_break_glass_exclusion(
                 live_exclude_users=live_exclude,
                 added_exclusions=list(added_exclusions),
             )
-            expected_exclusions_by_policy[policy_id] = target_exclusions
-            # Safety: build PATCH body from a single allow-listed key. No other
-            # policy field can be reached even if the snapshot was tampered with.
-            patch_body = _build_exclude_users_patch(target_exclusions)
-            await graph_client.update_conditional_access_policy(policy_id, patch_body)
+            # Safety: the provider PATCHes only conditions.users.excludeUsers, so no
+            # other policy field can be reached even if the snapshot was tampered with.
+            # It keeps registered break-glass accounts excluded, so verify against
+            # the list it actually sent.
+            expected_exclusions_by_policy[policy_id] = await graph_client.patch_conditional_access_exclude_users(
+                policy_id, target_exclusions
+            )
             restored.append(
                 {
                     "policy_id": policy_id,

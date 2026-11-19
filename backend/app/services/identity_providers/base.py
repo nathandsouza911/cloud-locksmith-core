@@ -158,6 +158,14 @@ class IdentityProviderAdapter(ABC):
         """Update a provider policy for remediation."""
 
     @abstractmethod
+    async def patch_conditional_access_exclude_users(
+        self,
+        policy_id: str,
+        exclude_users: list[str],
+    ) -> list[str]:
+        """Set only conditions.users.excludeUsers on a policy; return the list sent."""
+
+    @abstractmethod
     async def delete_conditional_access_policy(self, policy_id: str) -> dict[str, Any]:
         """Delete a provider policy created or managed by remediation."""
 

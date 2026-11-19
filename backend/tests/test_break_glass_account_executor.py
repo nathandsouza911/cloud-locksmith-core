@@ -103,9 +103,9 @@ class FakeBreakGlassGraphClient:
         self.role_members.append((role_id, user_id))
         return {}
 
-    async def update_conditional_access_policy(self, policy_id: str, payload: dict):
-        self.updated_policies.append((policy_id, payload))
-        return payload
+    async def patch_conditional_access_exclude_users(self, policy_id: str, exclude_users: list[str]):
+        self.updated_policies.append((policy_id, {"conditions": {"users": {"excludeUsers": list(exclude_users)}}}))
+        return list(exclude_users)
 
     async def delete_user(self, user_id: str):
         self.deleted_users.append(user_id)
@@ -203,3 +203,42 @@ def test_break_glass_executor_rollback_is_noop(db_session):
     assert graph_client.deleted_users == []
     assert [row.user_external_id for row in remaining] == ["user-1", "user-2"]
     assert tenant.asset_flags == {"break_glass_accounts": [{"user_id": "user-1"}, {"user_id": "user-2"}]}
+
+
+def test_break_glass_executor_patches_only_exclude_users_on_session_only_policies(db_session):
+    """Review 2026-11-19, R1-6: a session-only policy (grantControls null) made the
+    full-body PATCH fail after the Global Admin accounts were created. Only
+    excludeUsers is sent now, so the rest of the policy (locations, session
+    controls) is never rebuilt or re-sent."""
+    tenant = Tenant(
+        id="tenant-exec-session", tenant_name="Exec Tenant", domain="contoso.onmicrosoft.com", asset_flags={}
+    )
+    db_session.add(tenant)
+    db_session.commit()
+    graph_client = FakeBreakGlassGraphClient(db=db_session, tenant=tenant)
+    executor = BreakGlassAccountExecutor()
+
+    snapshot = asyncio.run(executor.build_snapshot(graph_client, {}))
+    snapshot["conditional_access_policies"] = [
+        {
+            "id": "policy-session-only",
+            "displayName": "Sign-in frequency",
+            "state": "enabled",
+            "conditions": {
+                "users": {"includeUsers": ["All"], "excludeUsers": ["existing-bg"]},
+                "applications": {"includeApplications": ["All"]},
+                "locations": {"includeLocations": ["All"], "excludeLocations": ["AllTrusted"]},
+            },
+            "grantControls": None,
+            "sessionControls": {"signInFrequency": {"value": 4, "type": "hours", "isEnabled": True}},
+        }
+    ]
+    result = asyncio.run(executor.execute(graph_client, {"snapshot": snapshot}))
+
+    assert result["status"] == "SUCCESS"
+    assert graph_client.updated_policies == [
+        (
+            "policy-session-only",
+            {"conditions": {"users": {"excludeUsers": ["existing-bg", "user-1", "user-2"]}}},
+        )
+    ]

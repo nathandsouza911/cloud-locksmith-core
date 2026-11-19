@@ -189,6 +189,17 @@ class GoogleWorkspaceAdapter(IdentityProviderAdapter):
             "TODO: Advanced Google policy enforcement is not implemented.",
         )
 
+    async def patch_conditional_access_exclude_users(
+        self,
+        policy_id: str,
+        exclude_users: list[str],
+    ) -> list[str]:
+        del policy_id, exclude_users
+        self._raise_unsupported(
+            "conditional access policy updates",
+            "TODO: Advanced Google policy enforcement is not implemented.",
+        )
+
     async def update_conditional_access_policy(
         self,
         policy_id: str,
