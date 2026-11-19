@@ -30,6 +30,12 @@ GRAPH_SCOPES = [{"id": f"scope-id-{name}", "value": name} for name in DELEGATED_
 SECRET_KEYS = ("MICROSOFT_CLIENT_SECRET", "MICROSOFT_CLIENT_SECRET_KEY_ID", "MICROSOFT_CLIENT_SECRET_EXPIRES")
 
 
+@pytest.fixture(autouse=True)
+def _auto_confirm(monkeypatch):
+    """Tests are not interactive: confirm by default. The confirmation tests override this."""
+    monkeypatch.setattr(cl_setup, "_confirm", lambda assume_yes: True)
+
+
 class FakeAz:
     """Records every call; answers like `az` for the commands setup uses."""
 
@@ -413,6 +419,61 @@ def test_create_prints_the_signed_in_tenant_before_creating_the_app(tmp_path, ca
     rest = capsys.readouterr().out + out
     for other in ("contoso.onmicrosoft.com", "it@contoso.com", "Secret Street", "admin@example.com"):
         assert other not in rest
+
+
+def test_declined_confirmation_creates_nothing_and_signs_out(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(cl_setup, "_confirm", lambda assume_yes: False)
+    az = FakeAz()
+    assert cl_setup.main([], az=az, out_dir=tmp_path) == 1
+    out, err = capsys.readouterr()
+    assert "Contoso Ltd" in out  # the tenant was shown before the question
+    assert "Nothing was created" in err
+    assert not az.called("ad", "app", "create") and not az.called("ad", "sp", "create")
+    assert list(tmp_path.iterdir()) == []
+    assert az.calls[-1] == (["logout"], True)
+
+
+def test_yes_flag_is_passed_to_the_confirmation(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(cl_setup, "_confirm", lambda assume_yes: seen.append(assume_yes) or True)
+    assert cl_setup.main(["--yes"], az=FakeAz(), out_dir=tmp_path) == 0
+    assert cl_setup.main([], az=FakeAz(), out_dir=tmp_path / "x") == 1  # missing dir: no confirmation asked
+    assert seen == [True]
+
+
+def test_confirm_with_yes_asks_nothing(monkeypatch):
+    monkeypatch.undo()  # use the real _confirm
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("must not ask"))
+    assert cl_setup._confirm(True) is True
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [("y", True), ("YES", True), (" yes ", True), ("", False), ("n", False), ("no", False), ("maybe", False)],
+)
+def test_confirm_prompt_defaults_to_no(monkeypatch, answer, expected):
+    monkeypatch.undo()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *_: answer)
+    assert cl_setup._confirm(False) is expected
+
+
+def test_confirm_without_a_terminal_refuses_and_points_to_yes(monkeypatch, capsys):
+    monkeypatch.undo()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    assert cl_setup._confirm(False) is False
+    assert "--yes" in capsys.readouterr().err
+
+
+def test_confirm_end_of_input_is_a_no(monkeypatch):
+    monkeypatch.undo()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+
+    def eof(*_):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", eof)
+    assert cl_setup._confirm(False) is False
 
 
 def test_tenant_line_falls_back_to_the_id_when_the_name_cannot_be_read(tmp_path, capsys):

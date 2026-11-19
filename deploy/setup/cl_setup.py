@@ -9,6 +9,8 @@ never prints a secret and never replaces a config that already exists.
 
 `--rotate-secret` adds a new client secret, saves it, then deletes the old one.
 `--tenant <tenant ID or domain>` signs in to that tenant (passed to `az login --tenant`).
+Before it creates anything it shows the tenant and asks for confirmation; `--yes` skips the
+question (needed when there is no terminal).
 
 Exit codes: 0 success or status, 1 failure, 2 an existing config is incomplete.
 """
@@ -424,7 +426,21 @@ def _tenant_line(az, tenant_id: str) -> str:
     return f"Tenant: {name}{f' ({domain})' if domain else ''}, tenant ID {tenant_id}"
 
 
-def _create(path: Path, az, tenant: str | None = None) -> int:
+def _confirm(assume_yes: bool) -> bool:
+    """Ask whether to create the app in the tenant that was just printed. The default is no."""
+    if assume_yes:
+        return True
+    if not sys.stdin.isatty():
+        _error("There is no terminal to ask for confirmation. Check the tenant above, then run again with --yes.")
+        return False
+    try:
+        answer = input("Create the app registration in this tenant? [y/N] ")
+    except EOFError:
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+
+def _create(path: Path, az, tenant: str | None = None, assume_yes: bool = False) -> int:
     db_path = path.with_name(DB_CONFIG_NAME)
     _sign_in(az, tenant)
     try:
@@ -439,7 +455,6 @@ def _create(path: Path, az, tenant: str | None = None) -> int:
             _error(f"You signed in to tenant {tenant_id}, but --tenant asked for {tenant}. Nothing was created.")
             return 1
         print(_tenant_line(az, tenant_id))
-        print("Creating the app registration in this tenant.")
         existing = [
             app["appId"]
             for app in az(["ad", "app", "list", "--display-name", APP_DISPLAY_NAME]) or []
@@ -454,6 +469,10 @@ def _create(path: Path, az, tenant: str | None = None) -> int:
                 "(App registrations), then run setup again. Nothing was created."
             )
             return 1
+        if not _confirm(assume_yes):
+            _error("Not confirmed. Nothing was created.")
+            return 1
+        print("Creating the app registration in this tenant.")
         graph_scopes = az(["ad", "sp", "show", "--id", GRAPH_APP_ID, "--query", "oauth2PermissionScopes"])
         resource_access = required_resource_access(DELEGATED_SCOPES, graph_scopes)
         local = generate_local_secrets()
@@ -603,6 +622,11 @@ def main(argv: list[str] | None = None, *, az=run_az, out_dir: Path = Path("/out
         metavar="TENANT",
         help="tenant ID or domain to sign in to (for an account in more than one tenant)",
     )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="create the app without asking for confirmation of the tenant (for use without a terminal)",
+    )
     args = parser.parse_args(argv)
 
     if not out_dir.is_dir() or not os.access(out_dir, os.W_OK):
@@ -626,7 +650,7 @@ def main(argv: list[str] | None = None, *, az=run_az, out_dir: Path = Path("/out
                 f"Move {DB_CONFIG_NAME} aside if no stack has used it, then run setup again."
             )
             return 2
-        return _create(path, az, args.tenant)
+        return _create(path, az, args.tenant, args.yes)
     except AzError as exc:
         _error(str(exc))
         return 1

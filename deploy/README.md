@@ -38,7 +38,11 @@ choose one with `--tenant`, which takes a tenant ID or a domain:
 docker compose run --rm setup --tenant contoso.onmicrosoft.com
 ```
 
-A tenant ID given with `--tenant` must match the tenant you sign in to. Setup then:
+A tenant ID given with `--tenant` must match the tenant you sign in to. Setup then asks
+`Create the app registration in this tenant? [y/N]`; the default is no, so a sign-in to
+the wrong tenant creates nothing. Without a terminal (for example `docker compose run
+--rm -T setup`) it refuses to ask; check the tenant, then pass `--yes` to skip the
+question. If you answer yes, setup:
 
 * creates a single-tenant app registration named **Cloud Locksmith (local)** with one
   redirect URI, `http://localhost:8000/api/v1/auth/microsoft/callback`, and a client
@@ -134,6 +138,34 @@ docker compose up -d
 The dump must come from the same release as the install you restore into, because the
 schema is versioned. A dump restored to another install also needs the same
 `cloud-locksmith.env`, or its tokens cannot be decrypted.
+
+## Check that it is running
+
+```
+curl http://localhost:8000/api/v1/health
+```
+
+returns `200`. `/health` (without `/api/v1`) is not the health route: it requires
+authentication and returns `401`, which is expected.
+
+## Uninstall
+
+1. Stop the stack and delete its data (this removes the database, including scan results
+   and the encrypted tokens):
+   ```
+   cd deploy
+   docker compose down -v
+   rm cloud-locksmith.env cloud-locksmith-db.env
+   ```
+2. In the Entra admin center, open **App registrations**, find **Cloud Locksmith
+   (local)** and delete it. This also removes its enterprise application and the admin
+   consent that was granted to it.
+3. Deleted apps stay in the recycle bin for 30 days. To remove it now, open **App
+   registrations > Deleted applications**, select the app and choose **Delete
+   permanently**. Do the same under **Enterprise applications > Deleted applications**
+   if the service principal is listed there.
+
+Setup has no uninstall command, so the app registration is removed by hand.
 
 ## Troubleshooting
 
