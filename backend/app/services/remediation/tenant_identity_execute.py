@@ -98,15 +98,15 @@ class GuestInvitesExecutor:
             graph_client,
             current_policy=current_policy,
             snapshot=snapshot,
-            desired_top_level_fields={
-                "allowInvitesFrom": (evidence.get("allowInvitesFrom") or AUTHORIZATION_POLICY_GUEST_ALLOW_INVITES),
-            },
+            # Always the fixed target: the finding's evidence holds the bad
+            # value it observed, never the value to set.
+            desired_top_level_fields={"allowInvitesFrom": AUTHORIZATION_POLICY_GUEST_ALLOW_INVITES},
         )
 
     async def preview(self, graph_client, evidence: dict) -> dict:
         current_policy = await graph_client.get("/policies/authorizationPolicy")
         current_value = current_policy.get("allowInvitesFrom")
-        desired_value = evidence.get("allowInvitesFrom") or AUTHORIZATION_POLICY_GUEST_ALLOW_INVITES
+        desired_value = AUTHORIZATION_POLICY_GUEST_ALLOW_INVITES
         return {
             "changes": [
                 {

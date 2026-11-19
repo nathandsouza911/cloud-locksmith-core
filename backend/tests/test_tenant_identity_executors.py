@@ -219,3 +219,21 @@ def test_admin_role_executor_removes_role_and_can_rollback():
     assert graph_client.added_members == [
         ("role-global-admin", "user-1"),
     ]
+
+
+def test_guest_invites_fix_ignores_the_observed_value_in_finding_evidence():
+    # The finding's evidence records the bad value it saw. Using it as the
+    # target made the fix "ALREADY_CONFIGURED" and change nothing.
+    executor = GuestInvitesExecutor()
+    graph_client = FakeGraphClient({"/policies/authorizationPolicy": {"allowInvitesFrom": "everyone"}})
+    finding_evidence = {"allowInvitesFrom": "everyone", "guest_invites_restricted": False}
+
+    result = asyncio.run(executor.execute(graph_client, finding_evidence))
+    preview = asyncio.run(executor.preview(graph_client, finding_evidence))
+
+    assert result["status"] == "UPDATED"
+    assert graph_client.patch_calls[0] == (
+        "/policies/authorizationPolicy",
+        {"allowInvitesFrom": "adminsAndGuestInviters"},
+    )
+    assert preview["changes"][0]["desired"] == "adminsAndGuestInviters"
