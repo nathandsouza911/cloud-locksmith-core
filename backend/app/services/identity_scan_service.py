@@ -142,6 +142,21 @@ async def _safe_upsert_control_result(db: AsyncSession, **kwargs):
         return None
 
 
+async def _resolve_unreported_user_findings(db, *, tenant_id: str, control_id: str, reported_ids) -> None:
+    """Close this control's USER rows for users the scan did not report on.
+
+    Call only after the control's reads succeeded. ``reported_ids`` must include
+    users whose result is unknown, so their existing row is kept as it is.
+    """
+    await resolve_findings_async(
+        db,
+        tenant_id=tenant_id,
+        control_ids=[control_id],
+        resource_type="USER",
+        keep_resource_ids=set(reported_ids),
+    )
+
+
 async def _build_role_map(db: AsyncSession, tenant) -> dict[str, list[dict[str, str]]]:
     roles_payload = await graph_get(db, tenant, "/directoryRoles")
     role_map: dict[str, list[dict[str, str]]] = {}
@@ -365,6 +380,15 @@ async def run_user_controls(
             control_ids=["IDENTITY_MAIL_FORWARDING_RULE"],
             resource_type="TENANT",
         )
+        if users:
+            # Users whose rules could not be read keep their row (unknown);
+            # users with no mailbox any more are closed.
+            await _resolve_unreported_user_findings(
+                db,
+                tenant_id=tenant_id,
+                control_id="IDENTITY_MAIL_FORWARDING_RULE",
+                reported_ids=set(rules_by_user) | set(rules_unavailable),
+            )
         logger.info(
             "identity_scan_service_mail_forwarding_summary tenant_id=%s forwarding_findings=%s "
             "evaluated=%s unavailable=%s without_mailbox=%s",
@@ -408,6 +432,7 @@ async def run_user_controls(
 
     user_mfa_failures = []
     admin_mfa_failures = []
+    mfa_reported: dict[str, set[str]] = {"IDENTITY_ADMIN_NO_MFA": set(), "IDENTITY_USER_NO_MFA": set()}
     for uid in all_user_ids:
         user = user_map[uid]
         entry = user_context.get(uid) or {"roles": [], "is_admin": False}
@@ -487,12 +512,25 @@ async def run_user_controls(
             evidence=evidence,
             decision_status=decision_status,
         )
+        mfa_reported[control_id].add(uid)
         if mfa_eval["passed"] is not False:  # passed, or unknown: not a failure
             continue
         if entry["is_admin"]:
             admin_mfa_failures.append(evidence)
         else:
             user_mfa_failures.append(evidence)
+
+    if users:
+        # A user who became (or stopped being) an admin moves between the two
+        # MFA controls; a break-glass user leaves both. Close the old row.
+        for mfa_control_id, reported_ids in mfa_reported.items():
+            if mfa_control_id in baseline_controls:
+                await _resolve_unreported_user_findings(
+                    db,
+                    tenant_id=tenant_id,
+                    control_id=mfa_control_id,
+                    reported_ids=reported_ids,
+                )
 
     overprivileged_user_findings = []
     if OVERPRIVILEGED_USER_CONTROL_ID in baseline_controls or ADMIN_COUNT_EXCESS_CONTROL_ID in baseline_controls:
@@ -585,6 +623,7 @@ async def run_user_controls(
     # Phishing-resistant MFA check — only for target admin roles, per-user Graph call.
     if "IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA" in baseline_controls:
         phish_failures = 0
+        phish_reported: set[str] = set()
         for uid, ctx in user_context.items():
             if not ctx.get("is_admin"):
                 continue
@@ -592,16 +631,22 @@ async def run_user_controls(
             user_role_names = {r.get("role_name") for r in ctx.get("roles", [])}
             if not (user_role_names & _PHISHING_RESISTANT_TARGET_ROLES):
                 continue
+            # A failed or denied read is unknown, not "no methods" (a false
+            # CRITICAL): keep the existing row. graph_get returns an error
+            # payload instead of raising on a 403 from this endpoint.
             try:
                 methods_resp = await graph_get(db, tenant, f"/users/{uid}/authentication/methods")
-                auth_methods = methods_resp.get("value", []) if isinstance(methods_resp, dict) else []
             except Exception:
                 logger.exception(
                     "phishing_resistant_mfa_methods_fetch_failed tenant_id=%s user_id=%s",
                     tenant_id,
                     uid,
                 )
-                auth_methods = []
+                methods_resp = None
+            if not isinstance(methods_resp, dict) or methods_resp.get("status") == "error":
+                phish_reported.add(uid)
+                continue
+            auth_methods = methods_resp.get("value", [])
             user = user_map.get(uid) or {}
             finding = evaluate_admin_phishing_resistant_mfa(
                 user_id=uid,
@@ -623,6 +668,7 @@ async def run_user_controls(
                 evidence=finding.get("evidence") or {},
                 decision_status="RESOLVED" if finding["passed"] else "MANUAL_ACTION_REQUIRED",
             )
+            phish_reported.add(uid)
             if not finding["passed"]:
                 phish_failures += 1
         logger.info(
@@ -630,6 +676,14 @@ async def run_user_controls(
             tenant_id,
             phish_failures,
         )
+        if users:
+            # An admin who lost the target roles, or became break-glass, is out of scope.
+            await _resolve_unreported_user_findings(
+                db,
+                tenant_id=tenant_id,
+                control_id="IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA",
+                reported_ids=phish_reported,
+            )
 
 
 _AUTHORIZATION_POLICY_CONTROLS = {
@@ -812,6 +866,14 @@ async def run_tenant_controls(
                     evidence=finding.get("evidence") or {},
                     decision_status="RESOLVED" if finding["passed"] else "PENDING",
                 )
+            # Every role read succeeded (a failure raises above): a principal
+            # with no permanent assignment any more is closed.
+            await _resolve_unreported_user_findings(
+                db,
+                tenant_id=tenant_id,
+                control_id="IDENTITY_PERMANENT_ROLE_ASSIGNMENT",
+                reported_ids={finding.get("resource_id") for finding in pra_findings},
+            )
             logger.info(
                 "identity_scan_permanent_role_summary tenant_id=%s findings=%s",
                 tenant_id,
