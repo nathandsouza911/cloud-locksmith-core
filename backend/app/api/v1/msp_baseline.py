@@ -57,19 +57,3 @@ async def get_baseline_templates(
     await ensure_default_baseline_template(db, current_tenant.organization_id)
     templates = await list_baseline_templates(db, current_tenant.organization_id)
     return [_serialize_template(template) for template in templates]
-
-
-@router.post("/msp/baseline", response_model=BaselineTemplateResponse)
-async def create_baseline(
-    payload: CreateBaselineRequest,
-    db: AsyncSession = Depends(get_db),
-    current_tenant: Tenant = Depends(get_current_tenant),
-    _write: None = Depends(require_write_access),
-):
-    baseline = await save_baseline_template(
-        db,
-        organization_id=current_tenant.organization_id,
-        baseline_name=payload.baseline_name,
-        controls=payload.controls,
-    )
-    return _serialize_template(baseline)

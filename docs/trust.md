@@ -19,7 +19,7 @@ if it drifts. Why each scope is needed: `permissions.md`.
 
 | Sign-in | Read scopes | Write scopes |
 |---|---|---|
-| Full connect (connect a tenant, MSP connect) | `openid`, `profile`, `email`, `offline_access`, `User.Read`, `User.Read.All`, `UserAuthenticationMethod.Read.All`, `Directory.Read.All`, `Policy.Read.All`, `RoleManagement.Read.Directory`, `AuditLog.Read.All`, `Reports.Read.All`, `MailboxSettings.Read` | **`User.ReadWrite.All`**, **`Policy.ReadWrite.Authorization`**, **`Policy.ReadWrite.ConditionalAccess`**, **`RoleManagement.ReadWrite.Directory`** |
+| Full connect (connect a tenant, re-authorize) | `openid`, `profile`, `email`, `offline_access`, `User.Read`, `User.Read.All`, `UserAuthenticationMethod.Read.All`, `Directory.Read.All`, `Policy.Read.All`, `RoleManagement.Read.Directory`, `AuditLog.Read.All`, `Reports.Read.All`, `MailboxSettings.Read` | **`User.ReadWrite.All`**, **`Policy.ReadWrite.Authorization`**, **`Policy.ReadWrite.ConditionalAccess`**, **`RoleManagement.ReadWrite.Directory`** |
 | Preview sign-in (read-only) | `openid`, `profile`, `email`, `offline_access`, `User.Read`, `User.Read.All`, `UserAuthenticationMethod.Read.All`, `Directory.Read.All`, `Policy.Read.All`, `RoleManagement.Read.Directory`, `AuditLog.Read.All` | none |
 | Licence cost checker | `openid`, `profile`, `email`, `offline_access`, `User.Read.All`, `Directory.Read.All`, `Reports.Read.All` | none |
 

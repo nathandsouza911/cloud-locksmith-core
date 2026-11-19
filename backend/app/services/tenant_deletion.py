@@ -35,7 +35,6 @@ TENANT_TABLES_DELETED = frozenset(
         "audit_logs",
         "break_glass_accounts",
         "break_glass_usage_events",
-        "campaign_tenant_tasks",
         "compliance_reports",
         "compliance_results",
         "compliance_snapshots",
@@ -85,7 +84,7 @@ def _delete_non_fk_tables(db: Session, tenant_id: str) -> None:
                              can be written even when the tenant row is locked
       report_schedules     — scheduler reads tenant_id as a plain string key;
                              FK was intentionally skipped during initial schema
-      report_payloads, campaign_tenant_tasks — tenant_id without a foreign key
+      report_payloads      — tenant_id without a foreign key
     """
     db.execute(text("DELETE FROM ingestion_snapshots WHERE tenant_id = :tid"), {"tid": tenant_id})
     # The audit_logs trigger refuses DELETE unless this transaction is purging that tenant.
@@ -93,7 +92,6 @@ def _delete_non_fk_tables(db: Session, tenant_id: str) -> None:
     db.execute(text("DELETE FROM audit_logs WHERE tenant_id = :tid"), {"tid": tenant_id})
     db.execute(text("DELETE FROM report_schedules WHERE tenant_id = :tid"), {"tid": tenant_id})
     db.execute(text("DELETE FROM report_payloads WHERE tenant_id = :tid"), {"tid": tenant_id})
-    db.execute(text("DELETE FROM campaign_tenant_tasks WHERE tenant_id = :tid"), {"tid": tenant_id})
 
 
 def delete_tenant_all_data(db: Session, tenant_id: str) -> None:

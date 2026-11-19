@@ -29,7 +29,7 @@ jest.mock("recharts", () => {
 });
 
 jest.mock("@/lib/auth-context", () => ({
-  useAuth: () => ({ tenantId: "tenant-1", setActiveTenantId: jest.fn(), isPreviewMode: false }),
+  useAuth: () => ({ tenantId: "tenant-1", setActiveTenantId: jest.fn(), isPreviewMode: false, tenants: [] }),
 }));
 
 jest.mock("@/lib/auth", () => ({
@@ -41,7 +41,6 @@ jest.mock("@/lib/api/hooks", () => {
   const empty = { data: [], loading: false, error: null, refetch: jest.fn() };
   return {
     useRiskFeed: () => empty,
-    useFleetPosture: () => ({ data: null, loading: false, error: null, refetch: jest.fn() }),
     useComplianceResults: () => empty,
     useControlCapabilities: () => ({ data: {}, loading: false, error: null, refetch: jest.fn() }),
     useAttackPaths: () => empty,

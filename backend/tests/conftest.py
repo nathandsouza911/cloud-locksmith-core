@@ -10,10 +10,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.base import Base
 from app.db.models.tenant_oauth import TenantOAuth  # noqa: F401 — registers table with Base.metadata
-from app.db.models.campaign_audit_event import CampaignAuditEvent  # noqa: F401
-from app.db.models.campaign_notarization_receipt import CampaignNotarizationReceipt  # noqa: F401
 from app.db.models.signing_key_metadata import SigningKeyMetadata  # noqa: F401
-from app.db.models.campaign_scheduled_job import CampaignScheduledJob  # noqa: F401
 from app.services.graph.tenant_graph_context import TenantGraphContext
 from app.services.detection.conditional_access.constants import PRIVILEGED_ROLE_IDS
 

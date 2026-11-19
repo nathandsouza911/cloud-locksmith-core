@@ -4,9 +4,11 @@ import SettingsPage from "../page";
 
 // ── External mocks ────────────────────────────────────────────────────────────
 
+const mockSearch = { value: "" };
+
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
-  useSearchParams: () => ({ get: () => null }),
+  useSearchParams: () => new URLSearchParams(mockSearch.value),
 }));
 
 jest.mock("lucide-react", () => {
@@ -89,7 +91,6 @@ function authWith(overrides: Record<string, unknown> = {}) {
     user: { email: "admin@example.com", userId: "u1" },
     logout: jest.fn(),
     tenantId: "tenant-abc",
-    isSmb: false,
     loading: false,
     tenants: [],
     selectedTenant: null,
@@ -214,11 +215,51 @@ describe("kept elements — always visible", () => {
 
 // ── Tests: SMB-specific Delete Account ────────────────────────────────────────
 
-describe("Delete Account — non-SMB user", () => {
-  test("does not render Delete Account button for non-SMB users", () => {
+describe("Delete Account", () => {
+  test("is offered once a tenant is connected", () => {
+    mockUseAuth.mockReturnValue(
+      authWith({ selectedTenant: { tenant_id: "tenant-abc", needs_reauth: false } }),
+    );
     renderSettings();
-    // The card heading should be absent when isSmb=false
+    expect(screen.getByRole("button", { name: /delete account/i })).toBeInTheDocument();
+  });
+
+  test("is not offered before a tenant is connected", () => {
+    renderSettings();
     expect(screen.queryByText(/delete account/i)).not.toBeInTheDocument();
+  });
+});
+
+// ── Tests: re-authorise and sign-in errors (MSP connect removed) ──────────────
+
+describe("Re-authorize Microsoft OAuth", () => {
+  test("starts smb_onboarding for the connected tenant", () => {
+    const { startMicrosoftOAuth } = require("@/lib/auth");
+    mockUseAuth.mockReturnValue(
+      authWith({ selectedTenant: { tenant_id: "tenant-abc", needs_reauth: true } }),
+    );
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: /re-authorize microsoft oauth/i }));
+    expect(startMicrosoftOAuth).toHaveBeenCalledWith("smb_onboarding", { tenantId: "tenant-abc" });
+  });
+});
+
+describe("Sign-in error from the OAuth callback", () => {
+  afterEach(() => {
+    mockSearch.value = "";
+  });
+
+  test("shows fixed text for the code, never the message from the URL", () => {
+    mockSearch.value = "connect_error=tenant_already_owned&connect_error_message=Visit%20evil.example";
+    renderSettings();
+    expect(screen.getByText(/microsoft sign-in failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/already connected by another account/i)).toBeInTheDocument();
+    expect(screen.queryByText(/evil\.example/)).not.toBeInTheDocument();
+  });
+
+  test("shows nothing without an error", () => {
+    renderSettings();
+    expect(screen.queryByText(/microsoft sign-in failed/i)).not.toBeInTheDocument();
   });
 });
 

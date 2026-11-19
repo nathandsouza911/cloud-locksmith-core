@@ -316,7 +316,7 @@ test("work card shows a run-state badge when run_state is set", () => {
 
 // ── Gate 1 — zero-tenant landing must not look like a broken error ───────────
 
-test("a brand-new user with zero connected tenants is sent to /tenants instead of seeing an error", () => {
+test("a brand-new user with zero connected tenants is sent to /dashboard instead of seeing an error", () => {
   mockUseAuth.mockReturnValue({ tenants: [] });
   mockUseWorkQueue.mockReturnValue({
     data: null,
@@ -327,7 +327,7 @@ test("a brand-new user with zero connected tenants is sent to /tenants instead o
 
   render(<WorkPage />);
 
-  expect(mockReplace).toHaveBeenCalledWith("/tenants");
+  expect(mockReplace).toHaveBeenCalledWith("/dashboard");
   expect(screen.queryByText(/select a tenant to continue/i)).not.toBeInTheDocument();
 });
 

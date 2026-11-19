@@ -4,8 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/lib/auth-context";
 import * as ep from "./endpoints";
-import * as campaignApi from "./campaigns";
-import type { TimelineQueryParams } from "@/types/timeline";
 
 interface QueryState<T> {
   data: T | null;
@@ -67,9 +65,7 @@ export function useQuery<T>(
   return { data, loading, error, refetch: run };
 }
 
-export const useFleetPosture = () => useQuery(() => ep.getFleetPosture(), [], { requireTenant: false });
-
-export const useFleetOverview = () => useQuery(() => ep.getFleetOverview(), [], { requireTenant: false });
+export const useOverview = () => useQuery(() => ep.getOverview(), [], { requireTenant: true });
 
 export const useRiskFeed = (_tenantId?: string | null) =>
   useQuery(() => ep.getRiskFeed(), [], { requireTenant: true });
@@ -241,32 +237,6 @@ export function useSimulation() {
   };
 }
 
-// ── Fleet campaigns ───────────────────────────────────────────────────────────
-
-export const useCampaigns = () => useQuery(() => campaignApi.listCampaigns(), [], { requireTenant: false });
-
-export const useCampaign = (campaignId: string | null) =>
-  useQuery(
-    () => {
-      if (!campaignId) return Promise.reject(new Error("No campaign ID"));
-      return campaignApi.getCampaign(campaignId);
-    },
-    [campaignId],
-    { requireTenant: false },
-  );
-
-export const useCampaignPreview = (controlIds: string[], tenantIds: string[]) =>
-  useQuery(
-    () => {
-      if (controlIds.length === 0 || tenantIds.length === 0) {
-        return Promise.resolve({ items: [] });
-      }
-      return campaignApi.getCampaignPreview(controlIds, tenantIds);
-    },
-    [controlIds.join(","), tenantIds.join(",")],
-    { requireTenant: false },
-  );
-
 // ─── Work queue (Sprint 1) ───────────────────────────────────────────────────
 
 export const useWorkQueue = () => useQuery(() => ep.getWorkQueue(), [], { requireTenant: true });
@@ -308,26 +278,6 @@ export const useWorkflowRun = (runId?: string | null) =>
       return ep.getWorkflowRun(runId);
     },
     [runId],
-    { requireTenant: true },
-  );
-
-// ─── Client timeline (Sprint 3) ──────────────────────────────────────────────
-
-export const useClientTimeline = (tenantId?: string | null, params?: TimelineQueryParams) =>
-  useQuery(
-    () => {
-      if (!tenantId) return Promise.reject(new Error("No tenant selected"));
-      return ep.getClientTimeline(tenantId, params);
-    },
-    [
-      tenantId,
-      params?.limit,
-      params?.cursor,
-      params?.workflow_id,
-      params?.since,
-      params?.until,
-      (params?.event_types ?? []).join(","),
-    ],
     { requireTenant: true },
   );
 

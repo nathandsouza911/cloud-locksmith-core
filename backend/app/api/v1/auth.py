@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize_email(email: str) -> str:
-    """Legacy helper kept for the existing MSP signup flow."""
+    """Legacy helper kept for the password signup flow."""
     return email.strip().lower()
 
 
@@ -174,7 +174,7 @@ def signup_password(
 
     organization = Organization(
         name=data.name.strip(),
-        mode=OrganizationMode.MANAGED if data.is_msp else OrganizationMode.SINGLE,
+        mode=OrganizationMode.SINGLE,
     )
     user = PlatformUser(
         email=normalized_email,

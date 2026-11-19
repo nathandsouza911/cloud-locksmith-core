@@ -25,7 +25,6 @@ import {
   useAttackPaths,
   useComplianceResults,
   useControlCapabilities,
-  useFleetPosture,
   useRiskFeed,
   useSimulation,
 } from "@/lib/api/hooks";
@@ -293,7 +292,7 @@ export default function RiskFeedPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { tenantId: activeTenantId, setActiveTenantId, isPreviewMode } = useAuth();
+  const { tenantId: activeTenantId, setActiveTenantId, isPreviewMode, tenants: linkedTenants } = useAuth();
   const simulation = useSimulation();
   const selectedRolesByResultIdRef = useRef<Record<string, string[]>>({});
 
@@ -301,7 +300,6 @@ export default function RiskFeedPage() {
   const effectiveTenantId = selectedTenantId ?? activeTenantId;
 
   const riskQuery = useRiskFeed(effectiveTenantId);
-  const fleetQuery = useFleetPosture();
   const complianceQuery = useComplianceResults(effectiveTenantId);
   const capabilitiesQuery = useControlCapabilities(effectiveTenantId);
   const attackPathsQuery = useAttackPaths(effectiveTenantId);
@@ -335,11 +333,11 @@ export default function RiskFeedPage() {
 
   const tenantOptions = useMemo(
     () =>
-      (fleetQuery.data?.tenants ?? []).map((tenant) => ({
+      linkedTenants.map((tenant) => ({
         label: tenant.tenant_name,
         value: tenant.tenant_id,
       })),
-    [fleetQuery.data],
+    [linkedTenants],
   );
 
   const attackPathControlFilter = useMemo(() => {

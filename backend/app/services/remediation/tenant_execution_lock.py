@@ -11,7 +11,7 @@ the release could run on another connection too, leaving the lock held by an idl
 pooled connection (live run 2026-11-13, defects L9 and L10). The lock is therefore
 taken on a connection checked out for this purpose and kept until the final release.
 
-Re-entrancy: within one task (one request, or one campaign tenant task) a nested
+Re-entrancy: within one task (one request or one background job) a nested
 acquire for the same tenant only increments a counter. Other requests run in other
 tasks or threads, whose context does not carry the holder, so they are refused.
 

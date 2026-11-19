@@ -10,17 +10,13 @@ gets 409 at once.
 """
 
 import threading
-import uuid
-from datetime import timedelta
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import text
 
 from app.api.routes import auth_microsoft as auth
-from app.db.models.pending_oauth_session import PendingOAuthSession
 from app.db.session import SyncSessionLocal, sync_engine
-from app.utils.datetime import utc_now
 
 WAIT_LIMIT_SECONDS = 5
 
@@ -55,8 +51,6 @@ def state(db_session):
     value = auth._encode_oauth_state(
         db_session,
         intent="preview",
-        user_id=None,
-        initiating_session_identifier=None,
         tenant_id=None,
         frontend_path=None,
     )
@@ -84,23 +78,6 @@ def test_pending_session_locked_by_another_callback(db_session, state):
         "SELECT 1 FROM pending_oauth_sessions WHERE state = :s FOR UPDATE",
         {"s": state},
         lambda s: auth._claim_pending_oauth_session(db=s, state=state, request=None, state_payload=payload),
-    )
-    _assert_refused_fast(finished, outcome)
-
-
-def test_pending_msp_session_locked_by_another_request(db_session):
-    row = PendingOAuthSession(
-        id=uuid.uuid4(),
-        state="s-" + uuid.uuid4().hex,
-        intent="msp_connect",
-        expires_at=utc_now() + timedelta(minutes=5),
-    )
-    db_session.add(row)
-    db_session.commit()
-    finished, outcome = _run_while_locked(
-        "SELECT 1 FROM pending_oauth_sessions WHERE id = :i FOR UPDATE",
-        {"i": row.id},
-        lambda s: auth._load_pending_msp_session(db=s, request=None, session_id=str(row.id), require_unconfirmed=True),
     )
     _assert_refused_fast(finished, outcome)
 

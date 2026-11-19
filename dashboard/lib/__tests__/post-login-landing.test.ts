@@ -1,7 +1,7 @@
 /**
  * Sprint 1 — after login a technician lands on their work, not on a dashboard.
  *
- * The destination is centralised so the eight entry points that redirect after
+ * The destination is centralised so the entry points that redirect after
  * authentication cannot drift apart again.
  */
 
@@ -18,11 +18,8 @@ test("no auth entry point hardcodes its own post-login destination", () => {
   const entryPoints = [
     "app/login/page.tsx",
     "app/auth/callback/page.tsx",
-    "app/msp/login/page.tsx",
-    "app/msp/signup/page.tsx",
     "app/preview-login/page.tsx",
     "app/onboarding/page.tsx",
-    "app/msp/confirm-tenant/page.tsx",
   ];
 
   const offenders = entryPoints.filter((file) => {

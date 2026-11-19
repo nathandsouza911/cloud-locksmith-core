@@ -2,10 +2,9 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft, ShieldCheck, ShieldX, TrendingUp, TrendingDown, Minus, Code, Users } from "lucide-react";
+import { ArrowLeft, ShieldCheck, ShieldX, TrendingUp, TrendingDown, Minus, Code } from "lucide-react";
 import { Card, PageHeader, Button, TableSkeleton, ErrorState } from "@/components/ui";
-import { useReportAttestation, useArchivedReport, useFleetPosture } from "@/lib/api/hooks";
-import { useAuth } from "@/lib/auth-context";
+import { useReportAttestation, useArchivedReport } from "@/lib/api/hooks";
 
 function HashField({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -23,25 +22,19 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 export default function ReportDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { tenantId } = useAuth();
   const [devMode, setDevMode] = useState(false);
 
   const reportId = typeof params.report_id === "string" ? parseInt(params.report_id, 10) : null;
 
   const attestationQuery = useReportAttestation(reportId);
   const archivedQuery = useArchivedReport();
-  const fleetQuery = useFleetPosture();
 
   const attestation = attestationQuery.data;
   const archived = archivedQuery.data;
-  const fleet = fleetQuery.data;
 
   const comparison = archived?.payload?.historical_comparison;
 
-  const currentTenant = fleet?.tenants?.find((t) => t.tenant_id === tenantId);
-  const showBenchmark = currentTenant !== undefined && fleet !== null && (fleet.fleet_size ?? 0) > 1;
-
-  const loading = attestationQuery.loading || archivedQuery.loading || fleetQuery.loading;
+  const loading = attestationQuery.loading || archivedQuery.loading;
 
   // Safely extract the nested attestation object — it's a required field per
   // the type but defensive access prevents crashes on unexpected API shapes.
@@ -191,45 +184,6 @@ export default function ReportDetailPage() {
               {comparison.improvement_summary ? (
                 <p className="mt-4 text-sm text-gray-400">{comparison.improvement_summary}</p>
               ) : null}
-            </Card>
-          ) : null}
-
-          {/* ── MSP fleet benchmark ─────────────────────────────────────── */}
-          {showBenchmark ? (
-            <Card className="p-5">
-              <div className="mb-4 flex items-center gap-2">
-                <Users size={16} className="text-cyan-400" />
-                <p className="text-sm font-semibold text-gray-200">MSP Fleet Benchmark</p>
-              </div>
-              <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">This Tenant</p>
-                  <p className="text-2xl font-bold tabular-nums text-white">
-                    {currentTenant?.posture_score ?? "—"}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                    Fleet Average
-                  </p>
-                  <p className="text-2xl font-bold tabular-nums text-cyan-400">
-                    {fleet?.fleet_avg_score ?? "—"}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Percentile</p>
-                  <p className="text-2xl font-bold tabular-nums text-white">
-                    {currentTenant?.percentile != null ? `${currentTenant.percentile}th` : "—"}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Position</p>
-                  <p className="text-sm font-semibold text-cyan-300">
-                    {currentTenant?.relative_position ?? "—"}
-                  </p>
-                  <p className="text-xs text-gray-500">{fleet?.fleet_size ?? "—"} tenants in fleet</p>
-                </div>
-              </div>
             </Card>
           ) : null}
 

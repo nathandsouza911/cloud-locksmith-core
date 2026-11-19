@@ -143,7 +143,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Single user account is disabled per finding; no shared resource affected.",
         "lockout_risk_notes": "None — only dormant (90+ day inactive) accounts are targeted; active admins are excluded.",
         "drift_detection_strategy": "Verifier re-checks accountEnabled state; DRIFT_DETECTED fires if the account is re-enabled without going through remediation.",
-        "campaign_notes": "Disables one account per task; rollback re-enables it. No data is deleted.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,
@@ -179,7 +178,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Removes privileged roles from a single user; that user loses admin access until rollback or manual grant.",
         "lockout_risk_notes": "Low — admin roles are removed per-user; break-glass accounts are excluded from findings.",
         "drift_detection_strategy": "Verifier re-checks role assignments; DRIFT_DETECTED if an excluded role is re-granted outside the remediation path.",
-        "campaign_notes": "Removes selected admin roles from one user per task; rollback re-grants the snapshot roles. No data is deleted.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,
@@ -235,7 +233,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Sets tenant-wide guest invitation policy to admin-only; no existing guests are affected.",
         "lockout_risk_notes": "None — policy change only; no accounts are disabled.",
         "drift_detection_strategy": "Verifier re-reads authorizationPolicy guestUserRoleId; DRIFT_DETECTED if setting is reverted.",
-        "campaign_notes": "Single setting change per tenant; rollback restores the original policy value from snapshot.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,
@@ -258,7 +255,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Restricts OAuth consent to admin-approved apps; individual users can no longer consent to third-party apps.",
         "lockout_risk_notes": "None — policy change only. Existing consented apps continue to function.",
         "drift_detection_strategy": "Verifier re-reads permissionGrantPolicy; DRIFT_DETECTED if consent policy is loosened.",
-        "campaign_notes": "Single setting change per tenant; rollback restores the original policy from snapshot.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,
@@ -281,7 +277,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Revokes OAuth2PermissionGrant objects; any app that relied on those grants will lose delegated access for affected users.",
         "lockout_risk_notes": "Low — revoked grants affect delegated app access, not admin sign-in paths.",
         "drift_detection_strategy": "Verifier re-queries OAuth2PermissionGrant objects; DRIFT_DETECTED if revoked grants reappear.",
-        "campaign_notes": "Revokes unauthorized OAuth grants per tenant; rollback re-creates grants from snapshot. Only use rollback for confirmed false positives.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 2,
@@ -366,7 +361,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Blocks device code flow sign-in; devices using the device code grant (TVs, IoT) will be unable to authenticate.",
         "lockout_risk_notes": "Low — only device code grant affected; interactive and client credentials flows unaffected.",
         "drift_detection_strategy": "Verifier re-reads CA policy; DRIFT_DETECTED if policy is disabled.",
-        "campaign_notes": "Creates or updates a single tenant-wide CA policy; rollback deletes the CLX policy or restores from pre-execution snapshot.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,
@@ -389,7 +383,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Minimal — blocks a rarely-used authentication flow; no standard end-user workflow relies on it.",
         "lockout_risk_notes": "Negligible — authentication transfer is not used in normal sign-in flows.",
         "drift_detection_strategy": "Verifier re-reads CA policy; DRIFT_DETECTED if policy is disabled.",
-        "campaign_notes": "Creates or updates a single tenant-wide CA policy; rollback deletes the CLX policy or restores from pre-execution snapshot.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,
@@ -443,7 +436,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Tenant-wide CA policy; legitimate high-risk events (travel, new device) may block real users until risk is dismissed in Identity Protection.",
         "lockout_risk_notes": "Low for users with registered MFA — Identity Protection risk can be dismissed. Break-glass exclusion is mandatory. Requires Entra P2 licence.",
         "drift_detection_strategy": "Verifier re-reads CA policy; DRIFT_DETECTED if policy is disabled or risk level coverage is narrowed.",
-        "campaign_notes": "Creates or updates a single tenant-wide CA block policy; rollback deletes the CLX policy or restores from pre-execution snapshot. GUARDED — requires Entra P2.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,
@@ -466,7 +458,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Tenant-wide CA policy; users without MFA registration methods will be blocked on medium/high risk sign-ins.",
         "lockout_risk_notes": "Medium for users without registered MFA methods — risk-based step-up will block them. Break-glass exclusion is mandatory. Requires Entra P2 licence.",
         "drift_detection_strategy": "Verifier re-reads CA policy; DRIFT_DETECTED if policy is disabled or risk level coverage is narrowed.",
-        "campaign_notes": "Creates or updates a single tenant-wide CA MFA step-up policy; rollback deletes the CLX policy or restores from pre-execution snapshot. GUARDED — requires Entra P2.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,
@@ -489,7 +480,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Removes DisablePasswordExpiration from a single user's passwordPolicies; the user's next password change becomes subject to the tenant expiry policy.",
         "lockout_risk_notes": "None — changing password policy does not affect current session or sign-in ability.",
         "drift_detection_strategy": "Verifier re-reads passwordPolicies; DRIFT_DETECTED if DisablePasswordExpiration is re-added after remediation.",
-        "campaign_notes": "Single-field PATCH per user; rollback restores exact original passwordPolicies string from snapshot.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,
@@ -525,7 +515,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Disables a single service principal per finding; any automation or workloads relying on the SP will stop working.",
         "lockout_risk_notes": "Low for stale SPs (90+ days inactive) — active workloads would have recent sign-in activity.",
         "drift_detection_strategy": "Verifier re-reads accountEnabled; DRIFT_DETECTED if the SP is re-enabled outside the remediation path.",
-        "campaign_notes": "Disables one SP per task; rollback re-enables it from pre-execution snapshot.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,
@@ -548,7 +537,6 @@ CONTROL_REGISTRY = {
         "blast_radius_notes": "Disables a single user account per finding; any operator using the service account interactively will be locked out.",
         "lockout_risk_notes": "Low for genuine service accounts — but name-based heuristic detection can misclassify human accounts. GUARDED classification requires human approval before execution.",
         "drift_detection_strategy": "Verifier re-reads accountEnabled; DRIFT_DETECTED if the account is re-enabled outside the remediation path.",
-        "campaign_notes": "Disables one account per task; rollback re-enables it from pre-execution snapshot. GUARDED — requires human approval per tenant due to heuristic detection risk.",
         "safe_scoring_hints": {
             "remediation_determinism": 3,
             "rollback_reliability": 3,

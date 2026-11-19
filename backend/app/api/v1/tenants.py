@@ -15,7 +15,7 @@ from app.db.models.platform_user import PlatformUser
 from app.db.models.tenant import Tenant
 from app.db.models.tenant_deletion_log import TenantDeletionLog
 from app.db.models.tenant_oauth import TenantOAuth
-from app.db.models.user_tenant_access import TenantAccessType, UserTenantAccess, UserTenantRole
+from app.db.models.user_tenant_access import UserTenantAccess, UserTenantRole
 from app.db.session import get_db, get_sync_db
 from app.schemas.tenant import TenantOut
 from app.services.graph_identity import fetch_current_identity
@@ -72,7 +72,6 @@ def list_my_tenants(
             "tenant_id": tenant.id,
             "tenant_name": tenant.tenant_name,
             "role": access.role.value if hasattr(access.role, "value") else access.role,
-            "account_type": "SMB" if access.access_type == TenantAccessType.SMB_OWNER else "MSP",
             **_tenant_status_payload(tenant, tenant_oauth),
         }
         for access, tenant, tenant_oauth in accesses

@@ -6,12 +6,13 @@ import { RefreshCw, Trash2 } from "lucide-react";
 import { Card, PageHeader, Button, SimulationPanel } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 import { startMicrosoftOAuth } from "@/lib/auth";
+import { signInErrorFromSearch } from "@/lib/connect-errors";
 import { useSimulation } from "@/lib/api/hooks";
 import { deleteTenant } from "@/lib/api/endpoints";
 import BreakGlassAccountsCard from "@/components/settings/BreakGlassAccountsCard";
 
 export default function SettingsPage() {
-  const { user, logout, tenantId, isSmb, selectedTenant } = useAuth();
+  const { user, logout, tenantId, selectedTenant } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -28,6 +29,8 @@ export default function SettingsPage() {
   const onboardingStatus = searchParams.get("status");
   const onboardingReason = searchParams.get("reason");
   const onboardingMessage = searchParams.get("message");
+  // Fixed text per error code; the message in the URL is never shown.
+  const connectError = signInErrorFromSearch(searchParams.toString());
 
   async function handleDeleteAccount() {
     if (!tenantId || deleteConfirmText !== "DELETE") return;
@@ -70,6 +73,13 @@ export default function SettingsPage() {
           </Card>
         )}
 
+      {connectError && (
+        <Card className="p-4 border-red-500/20 bg-red-500/5 max-w-2xl" role="alert">
+          <p className="text-sm font-semibold text-red-400">Microsoft sign-in failed</p>
+          <p className="mt-1 text-sm text-gray-300">{connectError}</p>
+        </Card>
+      )}
+
       {/* Microsoft 365 Connection */}
       <Card className="p-6 space-y-4 max-w-2xl">
         <h2 className="text-sm font-semibold text-gray-200">Microsoft 365 Connection</h2>
@@ -92,7 +102,16 @@ export default function SettingsPage() {
             </span>
           )}
         </div>
-        <Button variant="secondary" size="sm" onClick={() => startMicrosoftOAuth("msp_connect")}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() =>
+            startMicrosoftOAuth(
+              "smb_onboarding",
+              selectedTenant ? { tenantId: selectedTenant.tenant_id } : {},
+            )
+          }
+        >
           <RefreshCw size={13} /> Re-authorize Microsoft OAuth
         </Button>
       </Card>
@@ -143,7 +162,7 @@ export default function SettingsPage() {
         </Button>
       </Card>
 
-      {isSmb && (
+      {selectedTenant != null && (
         <Card className="p-4 border-red-700/40 bg-red-950/20 max-w-2xl">
           <p className="text-sm font-semibold text-red-400 mb-1">Delete Account</p>
           <p className="text-xs text-gray-400 mb-3">

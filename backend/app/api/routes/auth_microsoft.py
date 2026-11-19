@@ -8,7 +8,6 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -22,8 +21,7 @@ from app.db.models.oauth_state_nonce import OAuthStateNonce
 from app.db.models.tenant_oauth import TenantOAuth
 from app.db.models.user_tenant_access import TenantAccessType, UserTenantAccess, UserTenantRole
 from app.db.session import get_sync_db
-from app.services.audit.audit_logger import log_audit_event
-from app.services.auth.jwt_service import create_access_token, decode_access_token
+from app.services.auth.jwt_service import create_access_token
 from app.services.auth.oauth_identity_service import upsert_oauth_platform_user
 from app.services.auth.tenant_admin_verification import (
     oauth_user_holds_tenant_admin_role,
@@ -35,7 +33,7 @@ from app.services.graph_client import (
 )
 from app.services.identity_scan_service import run_scan
 from app.services.oidc_verifier import verify_microsoft_id_token
-from app.services.crypto import decrypt_token_dict, encrypt_str, encrypt_token_dict
+from app.services.crypto import encrypt_str
 from app.services.microsoft_oauth_scopes import (
     DELEGATED_SCOPE_STRING,
     PREVIEW_SCOPE_STRING,
@@ -62,19 +60,6 @@ _COST_CHECKER_SCOPES = [
     "Reports.Read.All",
 ]
 _COST_CHECKER_SCOPE_STRING = " ".join(_COST_CHECKER_SCOPES)
-
-
-class MspConnectConfirmRequest(BaseModel):
-    session_id: str
-
-
-class MspConnectPendingResponse(BaseModel):
-    session_id: str
-    tenant_id: str
-    tenant_name: str | None
-    domain: str | None
-    existing_organization_id: str | None
-    msp_organization_id: str | None
 
 
 def _normalize_tenant_hint(tenant_id: str | None) -> str | None:
@@ -158,19 +143,6 @@ def _store_token_metadata(token_data: dict) -> dict:
     }
 
 
-async def _oauth_user_can_claim_msp_tenant(
-    *,
-    access_token: str,
-    oauth_user_oid: str,
-) -> bool:
-    # Delegates to the shared verifier so MSP connect and SMB onboarding
-    # enforce identical tenant-admin role requirements.
-    return await oauth_user_holds_tenant_admin_role(
-        access_token=access_token,
-        oauth_user_oid=oauth_user_oid,
-    )
-
-
 def _oauth_state_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(settings.SESSION_SECRET, salt=MICROSOFT_OAUTH_STATE_SALT)
 
@@ -185,53 +157,13 @@ def _platform_user_lookup_id(user_id: str | uuid.UUID) -> uuid.UUID:
         ) from exc
 
 
-def _get_platform_session_from_cookie(request: Request, db: Session) -> tuple[PlatformUser, dict]:
-    token = request.cookies.get(settings.APP_AUTH_COOKIE_NAME)
-    if not token:
-        raise HTTPException(
-            status_code=401,
-            detail="User must be logged in before starting OAuth",
-        )
-
-    try:
-        payload = decode_access_token(token)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=401,
-            detail="User must be logged in before starting OAuth",
-        ) from exc
-
-    user_id = payload.get("sub") or payload.get("user_id")
-    if not user_id:
-        raise HTTPException(
-            status_code=401,
-            detail="User must be logged in before starting OAuth",
-        )
-
-    current_user = db.get(PlatformUser, _platform_user_lookup_id(user_id))
-    if current_user is None:
-        raise HTTPException(
-            status_code=401,
-            detail="User must be logged in before starting OAuth",
-        )
-
-    return current_user, payload
-
-
-def get_current_user_from_cookie(request: Request, db: Session) -> PlatformUser:
-    current_user, _payload = _get_platform_session_from_cookie(request, db)
-    return current_user
-
-
 def _encode_oauth_state(
     db: Session,
     intent: str,
-    user_id: str | None = None,
-    initiating_session_identifier: str | None = None,
     tenant_id: str | None = None,
     frontend_path: str | None = None,
 ) -> str:
-    if intent not in {"smb_onboarding", "msp_connect", "preview", "cost_checker"}:
+    if intent not in {"smb_onboarding", "preview", "cost_checker"}:
         raise HTTPException(status_code=400, detail="Invalid OAuth intent")
 
     nonce = uuid.uuid4().hex
@@ -241,11 +173,6 @@ def _encode_oauth_state(
         "nonce": nonce,
         "intent": intent,
     }
-    if intent == "msp_connect":
-        if user_id is None:
-            raise HTTPException(status_code=400, detail="msp_connect requires authenticated user")
-        payload["user_id"] = str(user_id)
-
     normalized_tenant_id = _normalize_tenant_hint(tenant_id)
     if normalized_tenant_id is not None:
         payload["tenant_id"] = normalized_tenant_id
@@ -259,8 +186,6 @@ def _encode_oauth_state(
     db.add(
         PendingOAuthSession(
             state=state,
-            initiating_user_id=uuid.UUID(str(user_id)) if user_id else None,
-            initiating_session_identifier=initiating_session_identifier,
             intent=intent,
             expected_tenant_id=normalized_tenant_id,
             frontend_path=frontend_path,
@@ -298,22 +223,15 @@ def _decode_oauth_state(db: Session, state: str) -> dict:
         raise HTTPException(status_code=401, detail="OAuth session expired or invalid") from exc
 
     csrf = payload.get("csrf")
-    user_id = payload.get("user_id")
     provider = payload.get("provider")
 
-    # Accept both the new "msp_connect" intent and the legacy "connect_tenant" label
-    # so that in-flight states from old code aren't rejected.
     raw_intent = payload.get("intent") or payload.get("flow") or payload.get("action")
-    if raw_intent == "connect_tenant":
-        raw_intent = "msp_connect"
 
     if not isinstance(csrf, str) or len(csrf) < 20:
         raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
     if provider != "microsoft":
         raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
-    if raw_intent not in {"smb_onboarding", "msp_connect", "preview", "cost_checker"}:
-        raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
-    if raw_intent == "msp_connect" and (user_id is None or not isinstance(user_id, str) or not user_id.strip()):
+    if raw_intent not in {"smb_onboarding", "preview", "cost_checker"}:
         raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
 
     payload["intent"] = raw_intent  # normalise so the callback can read a single field
@@ -373,18 +291,6 @@ def _claim_pending_oauth_session(
         raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
     if pending.intent != state_payload.get("intent"):
         raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
-
-    if pending.intent == "msp_connect":
-        current_user, auth_payload = _get_platform_session_from_cookie(request, db)
-        session_identifier = str(auth_payload.get("jti") or "").strip()
-        if not session_identifier:
-            raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
-        if str(current_user.id) != str(pending.initiating_user_id):
-            raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
-        if session_identifier != pending.initiating_session_identifier:
-            raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
-        if str(state_payload.get("user_id") or "") != str(current_user.id):
-            raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
 
     pending.consumed_at = utc_now()
     db.flush()
@@ -554,63 +460,6 @@ def _persist_tenant_token(
     db.commit()
 
 
-def _load_pending_msp_session(
-    *,
-    db: Session,
-    request: Request,
-    session_id: str,
-    require_unconfirmed: bool,
-) -> tuple[PendingOAuthSession, PlatformUser]:
-    try:
-        pending_id = uuid.UUID(str(session_id))
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=404, detail="Pending MSP connection not found") from exc
-
-    pending = _lock_one_nowait(db.query(PendingOAuthSession).filter(PendingOAuthSession.id == pending_id))
-    if pending is None or pending.intent != "msp_connect":
-        raise HTTPException(status_code=404, detail="Pending MSP connection not found")
-    if pending.consumed_at is None:
-        raise HTTPException(status_code=409, detail="OAuth callback has not completed")
-    if require_unconfirmed and pending.confirmed_at is not None:
-        raise HTTPException(status_code=409, detail="Pending MSP connection already confirmed")
-    if _utc_aware(pending.expires_at) <= utc_now():
-        raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
-
-    current_user, auth_payload = _get_platform_session_from_cookie(request, db)
-    session_identifier = str(auth_payload.get("jti") or "").strip()
-    if not session_identifier:
-        raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
-    if str(current_user.id) != str(pending.initiating_user_id):
-        raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
-    if session_identifier != pending.initiating_session_identifier:
-        raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
-    if not isinstance(pending.callback_payload, dict):
-        raise HTTPException(status_code=409, detail="MSP connection is incomplete")
-
-    return pending, current_user
-
-
-def _pending_msp_tenant_payload(pending: PendingOAuthSession) -> dict:
-    payload = pending.callback_payload if isinstance(pending.callback_payload, dict) else {}
-    tenant_payload = payload.get("tenant")
-    if not isinstance(tenant_payload, dict):
-        raise HTTPException(status_code=409, detail="MSP connection is incomplete")
-    tenant_id = str(tenant_payload.get("tenant_id") or "").strip()
-    if not tenant_id or tenant_id != pending.resolved_tenant_id:
-        raise HTTPException(status_code=409, detail="MSP connection tenant mismatch")
-    return tenant_payload
-
-
-def _pending_msp_stored_token(pending: PendingOAuthSession) -> dict:
-    payload = pending.callback_payload if isinstance(pending.callback_payload, dict) else {}
-    staged_token = payload.get("stored_token")
-    if not isinstance(staged_token, dict):
-        raise HTTPException(status_code=409, detail="MSP connection is incomplete")
-    # NOTE: no Policy.ReadWrite.Authorization gate here — see the callback's
-    # equivalent note and docs/oauth-policy-authorization-scope-audit.md.
-    return decrypt_token_dict(staged_token)
-
-
 @router.get("/start")
 def start_microsoft_oauth(
     request: Request,
@@ -620,18 +469,11 @@ def start_microsoft_oauth(
     frontend_path: str | None = Query(default=None),
     db: Session = Depends(get_sync_db),
 ):
-    if intent not in {"smb_onboarding", "msp_connect", "preview", "cost_checker"}:
+    if intent not in {"smb_onboarding", "preview", "cost_checker"}:
         raise HTTPException(
             status_code=400,
-            detail="Invalid intent. Must be 'smb_onboarding', 'msp_connect', 'preview', or 'cost_checker'",
+            detail="Invalid intent. Must be 'smb_onboarding', 'preview', or 'cost_checker'",
         )
-
-    current_user: PlatformUser | None = None
-    initiating_session_identifier: str | None = None
-    if intent == "msp_connect":
-        # MSP connect always requires an authenticated session.
-        current_user, auth_payload = _get_platform_session_from_cookie(request, db)
-        initiating_session_identifier = str(auth_payload.get("jti") or "").strip() or None
 
     normalized_tenant_id = _normalize_tenant_hint(tenant_id)
     single_tenant_id = settings.single_tenant_id
@@ -649,8 +491,6 @@ def start_microsoft_oauth(
     state = _encode_oauth_state(
         db,
         intent=intent,
-        user_id=str(current_user.id) if current_user is not None else None,
-        initiating_session_identifier=initiating_session_identifier,
         tenant_id=normalized_tenant_id,
         frontend_path=frontend_path,
     )
@@ -664,8 +504,8 @@ def start_microsoft_oauth(
     else:
         scope_string = DELEGATED_SCOPE_STRING
     # Preview and cost-checker always force a fresh consent screen so Microsoft
-    # re-evaluates the narrower read-only scope set. For full onboarding and MSP
-    # connect, honor force_consent instead of always falling back to account-picker
+    # re-evaluates the narrower read-only scope set. For full onboarding, honor
+    # force_consent instead of always falling back to account-picker
     # behavior, otherwise the permissions page can be skipped entirely on tenants
     # where a prior grant already exists.
     prompt_value = "consent" if force_consent or intent in {"preview", "cost_checker"} else "select_account"
@@ -738,14 +578,15 @@ class _CallbackDenied(HTTPException):
 
 def _connect_error_redirect(code: str, message: str | None = None) -> RedirectResponse:
     """A friendly landing spot for any onboarding failure, instead of a raw
-    backend JSON error. `/tenants` is where "Add Tenant" already lives, so
-    it's the natural place for a user to land and try again.
+    backend JSON error. Settings holds the "Re-authorize Microsoft OAuth"
+    button, so a signed-in user can try again there; a signed-out user is sent
+    on to /login with the code (the dashboard layout does that).
     """
     params = {"connect_error": code}
     if message:
         params["connect_error_message"] = message
     return RedirectResponse(
-        url=f"{settings.FRONTEND_URL}/tenants?{urlencode(params)}",
+        url=f"{settings.FRONTEND_URL}/settings?{urlencode(params)}",
         status_code=302,
     )
 
@@ -757,7 +598,8 @@ async def _microsoft_oauth_callback_impl(
     db: Session,
 ):
     state_payload = _decode_oauth_state(db, state)
-    pending_session = _claim_pending_oauth_session(
+    # Consumes the single-use pending session; raises if it is missing, spent or expired.
+    _claim_pending_oauth_session(
         db=db,
         state=state,
         request=request,
@@ -876,13 +718,6 @@ async def _microsoft_oauth_callback_impl(
             "/me?$select=id,displayName,userPrincipalName,mail",
             expected_tenant_id=azure_tenant_id,
         )
-    oauth_user_oid = str(
-        id_token_claims.get("oid")
-        or me_claims.get("id")
-        or decode_access_token_claims(stored_token["access_token"]).get("oid")
-        or ""
-    ).strip()
-
     # ------------------------------------------------------------------ #
     #  PREVIEW — read-only login; user gets READ_ONLY tenant access       #
     # ------------------------------------------------------------------ #
@@ -1043,7 +878,7 @@ async def _microsoft_oauth_callback_impl(
         tenant = db.get(Tenant, smb_tenant_id)
         owner_user = None
         if tenant is not None:
-            # Only block if there is already an SMB_OWNER — MSP-only associations do not block SMB onboarding.
+            # Only an existing SMB_OWNER blocks onboarding by a different identity.
             smb_owner_access = (
                 db.query(UserTenantAccess)
                 .filter(
@@ -1080,7 +915,7 @@ async def _microsoft_oauth_callback_impl(
                         detail=_TENANT_ALREADY_OWNED_MESSAGE,
                     )
 
-        # First-owner claim must be a tenant admin (parity with MSP connect).
+        # First-owner claim must be a tenant admin.
         # A returning owner (owner_user matched by oid above) is not re-checked.
         # Verify BEFORE persisting any delegated token or granting OWNER so a
         # non-admin leaves no trace and is denied — fail closed.
@@ -1151,86 +986,9 @@ async def _microsoft_oauth_callback_impl(
             tenant_ids=tenant_ids,
         )
 
-    # ------------------------------------------------------------------ #
-    #  MSP CONNECT — attach tenant to existing MSP org, keep session      #
-    # ------------------------------------------------------------------ #
-    platform_user = db.get(PlatformUser, pending_session.initiating_user_id)
-    if platform_user is None:
-        raise HTTPException(status_code=401, detail="OAuth initiator user not found")
-
-    # MSP_CONNECT hijack prevention: the OAuth-completing user MUST be a
-    # Global Admin or Privileged Role Administrator on the tenant being
-    # attached. Without this check, any logged-in MSP user could attach a
-    # tenant they do not control (brand-new tenants or tenants inside their
-    # own org). Verify unconditionally against the tenant resolved from the
-    # delegated access token.
-    can_connect = await _oauth_user_can_claim_msp_tenant(
-        access_token=stored_token["access_token"],
-        oauth_user_oid=oauth_user_oid,
-    )
-    if not can_connect:
-        logger.warning(
-            "msp_connect_denied_not_admin tenant_id=%s user_id=%s user_org=%s",
-            tenant_identifier,
-            platform_user.id,
-            platform_user.organization_id,
-        )
-        return RedirectResponse(
-            url=(f"{settings.FRONTEND_URL}/tenants?" + urlencode({"error": "tenant_admin_required"})),
-            status_code=302,
-        )
-
-    existing_tenant = db.get(Tenant, tenant_identifier)
-    if existing_tenant is not None:
-        tenant_org_id = existing_tenant.organization_id
-        if tenant_org_id is not None and tenant_org_id != platform_user.organization_id:
-            # Tenant already belongs to a different organisation. Even with
-            # admin rights on the tenant, we do NOT overwrite
-            # tenant.organization_id — ownership is stable — we only grant
-            # MSP_MANAGER access to the attaching user below.
-            logger.info(
-                "msp_connect_cross_org tenant_id=%s tenant_org=%s msp_org=%s",
-                tenant_identifier,
-                tenant_org_id,
-                platform_user.organization_id,
-            )
-        # Same org (or no org yet) — idempotent; fall through to upsert below.
-
-    # NOTE: connecting a tenant no longer requires Policy.ReadWrite.Authorization
-    # as a blanket gate. That permission backs one specific control
-    # (IDENTITY_USER_CONSENT_POLICY), whose own execution-time permission check
-    # (remediation_execution_service.py) already protects it independently.
-    # See docs/oauth-policy-authorization-scope-audit.md.
-
-    tenant_org_id = existing_tenant.organization_id if existing_tenant is not None else None
-    pending_session.resolved_tenant_id = tenant_identifier
-    pending_session.callback_payload = {
-        "tenant": {
-            "tenant_id": tenant_identifier,
-            "tenant_name": tenant_data.get("displayName"),
-            "domain": primary_domain,
-            "provider": "microsoft",
-            "existing_organization_id": str(tenant_org_id) if tenant_org_id is not None else None,
-            "msp_organization_id": str(platform_user.organization_id),
-        },
-        "stored_token": encrypt_token_dict({**stored_token, "tenant_id": tenant_identifier}),
-        "oauth_user_oid": oauth_user_oid,
-        "frontend_path": frontend_path,
-    }
-    db.add(pending_session)
-    db.commit()
-
-    logger.info(
-        "msp_connect_confirmation_staged user_id=%s tenant_id=%s org_id=%s pending_session_id=%s",
-        platform_user.id,
-        tenant_identifier,
-        platform_user.organization_id,
-        pending_session.id,
-    )
-    return RedirectResponse(
-        url=(f"{settings.FRONTEND_URL}/msp/confirm-tenant?" + urlencode({"session_id": str(pending_session.id)})),
-        status_code=302,
-    )
+    # Every intent is handled above; anything else is refused (fail closed).
+    logger.warning("microsoft_oauth_unknown_intent intent=%r", intent)
+    raise HTTPException(status_code=401, detail="OAuth session expired or invalid")
 
 
 @router.get("/callback")
@@ -1268,112 +1026,3 @@ async def microsoft_oauth_callback(
         logger.warning("microsoft_oauth_callback_failed status=%s detail=%s", exc.status_code, detail)
         code = getattr(exc, "connect_error_code", "connection_failed")
         return _connect_error_redirect(code=code, message=detail)
-
-
-@router.get("/msp-connect/pending/{session_id}", response_model=MspConnectPendingResponse)
-def get_pending_msp_connect(
-    session_id: str,
-    request: Request,
-    db: Session = Depends(get_sync_db),
-):
-    pending, _platform_user = _load_pending_msp_session(
-        db=db,
-        request=request,
-        session_id=session_id,
-        require_unconfirmed=False,
-    )
-    tenant_payload = _pending_msp_tenant_payload(pending)
-    return MspConnectPendingResponse(
-        session_id=str(pending.id),
-        tenant_id=str(tenant_payload["tenant_id"]),
-        tenant_name=tenant_payload.get("tenant_name"),
-        domain=tenant_payload.get("domain"),
-        existing_organization_id=tenant_payload.get("existing_organization_id"),
-        msp_organization_id=tenant_payload.get("msp_organization_id"),
-    )
-
-
-@router.post("/msp-connect/confirm")
-async def confirm_msp_connect(
-    payload: MspConnectConfirmRequest,
-    request: Request,
-    db: Session = Depends(get_sync_db),
-):
-    pending, platform_user = _load_pending_msp_session(
-        db=db,
-        request=request,
-        session_id=payload.session_id,
-        require_unconfirmed=True,
-    )
-    tenant_payload = _pending_msp_tenant_payload(pending)
-    stored_token = _pending_msp_stored_token(pending)
-
-    tenant_id = str(tenant_payload["tenant_id"])
-    single_tenant_id = settings.single_tenant_id
-    if single_tenant_id and tenant_id.strip().lower() != single_tenant_id:
-        # A session staged before single-tenant mode was switched on must not attach.
-        logger.warning("microsoft_oauth_tenant_not_allowed intent=%s tid=%r", pending.intent, tenant_id)
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "TENANT_NOT_ALLOWED",
-                "message": "This install only signs in to its configured Microsoft tenant.",
-            },
-        )
-    tenant = get_or_create_tenant(
-        db=db,
-        tenant_id=tenant_id,
-        name=tenant_payload.get("tenant_name") or "Microsoft Tenant",
-        domain=tenant_payload.get("domain"),
-        provider=tenant_payload.get("provider") or "microsoft",
-        organization_id=platform_user.organization_id,
-    )
-    if tenant.organization_id is None and platform_user.organization_id is not None:
-        tenant.organization_id = platform_user.organization_id
-
-    stored_token["tenant_id"] = tenant.id
-    _stage_tenant_token(
-        db=db,
-        tenant=tenant,
-        stored_token=stored_token,
-        intent="msp_connect",
-    )
-    get_or_create_user_tenant_access(
-        db=db,
-        user_id=platform_user.id,
-        tenant_id=tenant.id,
-        role=UserTenantRole.OWNER,
-        organization_id=platform_user.organization_id,
-        access_type=TenantAccessType.MSP_MANAGER,
-    )
-    pending.confirmed_at = utc_now()
-    db.add(pending)
-    db.commit()
-
-    existing_org_id = tenant_payload.get("existing_organization_id")
-    if existing_org_id and existing_org_id != str(platform_user.organization_id):
-        log_audit_event(
-            db=db,
-            tenant_id=tenant.id,
-            action="msp_tenant_connected",
-            actor=platform_user.email,
-            target=tenant.id,
-            status="SUCCESS",
-            reason=None,
-            details={
-                "msp_org_id": str(platform_user.organization_id),
-                "tenant_id": str(tenant.id),
-                "pending_session_id": str(pending.id),
-            },
-        )
-
-    logger.info(
-        "msp_connect tenant confirmed user_id=%s tenant_id=%s org_id=%s pending_session_id=%s",
-        platform_user.id,
-        tenant.id,
-        platform_user.organization_id,
-        pending.id,
-    )
-
-    await run_scan(str(tenant.id))
-    return {"status": "tenant_attached", "tenant_id": tenant.id}

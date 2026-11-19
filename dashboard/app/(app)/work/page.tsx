@@ -146,14 +146,14 @@ export default function WorkPage() {
   const router = useRouter();
 
   // A brand-new user with zero connected tenants isn't experiencing an
-  // error -- they just haven't onboarded yet. /tenants already renders a
-  // correct empty state with an "Add Tenant" call to action; landing them
+  // error -- they just haven't onboarded yet. /dashboard already renders a
+  // correct empty state with a "Connect Tenant" call to action; landing them
   // here instead of on a bare "Select a tenant to continue" message (which
   // reads exactly like a broken page) is the fix.
   const hasNoTenants = tenants.length === 0;
   useEffect(() => {
     if (hasNoTenants) {
-      router.replace("/tenants");
+      router.replace("/dashboard");
     }
   }, [hasNoTenants, router]);
 

@@ -21,9 +21,9 @@ forged, and headers prove nothing on their own.
 | Tenant resolver falls back to a session value | The session-based resolver was removed; the tenant guard fails closed. | `test_tenant_service_no_unsafe_resolver.py`, `test_tenant_guard_fails_closed.py` |
 
 Public routes (exempt from the tenant middleware) are listed in `PUBLIC_ROUTES` in
-`app/middleware/tenant_context.py`. `/api/v1/msp/fleet-overview` and
-`/api/v1/realtime/stream` are exempt from tenant selection but still require a signed-in
-user and are scoped to that user's tenants or organization.
+`app/middleware/tenant_context.py`. `/api/v1/realtime/stream` is exempt from tenant
+selection but still requires a signed-in user and is scoped to that user's tenants or
+organization.
 
 ## Sign-in (OAuth)
 
@@ -33,10 +33,10 @@ user and are scoped to that user's tenants or organization.
 * The user is identified by `oid`, never by email or UPN.
 * **Owner binding:** the first owner of a tenant must hold a tenant-admin role. A later
   Preview or SMB-connect sign-in to an already-owned tenant by a different `oid` is
-  refused with 403. MSP connect has its own confirmation step.
+  refused with 403.
 * Preview sign-ins get READ_ONLY access, and their token is not stored.
 
-Tests: `test_onboarding_admin_verification.py`, `test_auth_microsoft_msp_connect.py`,
+Tests: `test_onboarding_admin_verification.py`, `test_single_tenant_mode.py`,
 `test_onboarding_callback_error_handling.py`.
 
 ## Tokens and sessions

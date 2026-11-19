@@ -8,9 +8,9 @@ signs in. All lists below are copied from the code; if they disagree, the code w
 
 The demo (`DEMO_MODE=true`) requests no permissions and makes no Microsoft calls.
 
-## Full connect (`smb_onboarding`, `msp_connect`)
+## Full connect (`smb_onboarding`)
 
-`DELEGATED_SCOPES`, used for the normal "connect a tenant" sign-in and MSP connect:
+`DELEGATED_SCOPES`, used for the normal "connect a tenant" sign-in and for re-authorizing it:
 
 | Scope | Why it is requested |
 |---|---|
@@ -55,7 +55,7 @@ is the tenant being changed. You do not need to grant any application permission
 * The one-command install (`deploy/README.md`) registers a single-tenant app and declares
   the delegated scopes on it. It grants no admin consent and assigns no roles: consent
   happens on the sign-in screen, as above. It sets `MICROSOFT_TENANT` to the tenant ID,
-  which limits sign-in (start, callback and MSP confirm) to that tenant.
+  which limits sign-in (start and callback) to that tenant.
 * Admin consent is required for most of these scopes. Use a Global Administrator for the
   first connect; the tenant is then bound to that user's `oid` as owner (see
   `connect-a-real-tenant.md`).

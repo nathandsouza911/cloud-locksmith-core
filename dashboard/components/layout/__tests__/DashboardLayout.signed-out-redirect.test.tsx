@@ -34,7 +34,6 @@ jest.mock("@/lib/auth-context", () => ({
     tenants: [],
     selectedTenant: null,
     requiresTenantSelection: false,
-    isSmb: false,
     isPreviewMode: false,
     setActiveTenantId: jest.fn(),
     logout: jest.fn(),
