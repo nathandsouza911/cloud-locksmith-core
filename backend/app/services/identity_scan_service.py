@@ -629,18 +629,22 @@ async def run_user_controls(
             user_role_names = {r.get("role_name") for r in ctx.get("roles", [])}
             if not (user_role_names & _PHISHING_RESISTANT_TARGET_ROLES):
                 continue
+            # A failed or denied read is unknown, not "no methods" (a false
+            # CRITICAL): keep the existing row. graph_get returns an error
+            # payload instead of raising on a 403 from this endpoint.
             try:
                 methods_resp = await graph_get(db, tenant, f"/users/{uid}/authentication/methods")
-                auth_methods = methods_resp.get("value", []) if isinstance(methods_resp, dict) else []
             except Exception:
-                # Unknown, not "no methods" (a false CRITICAL): keep the existing row.
                 logger.exception(
                     "phishing_resistant_mfa_methods_fetch_failed tenant_id=%s user_id=%s",
                     tenant_id,
                     uid,
                 )
+                methods_resp = None
+            if not isinstance(methods_resp, dict) or methods_resp.get("status") == "error":
                 phish_reported.add(uid)
                 continue
+            auth_methods = methods_resp.get("value", [])
             user = user_map.get(uid) or {}
             finding = evaluate_admin_phishing_resistant_mfa(
                 user_id=uid,

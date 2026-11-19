@@ -192,3 +192,28 @@ async def test_phishing_resistant_row_is_kept_when_the_methods_read_fails(monkey
 
     assert [u for u in upserts if u["control_id"] == "IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA"] == []
     assert resolves["IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA"] == [{ADMIN}]
+
+
+@pytest.mark.asyncio
+async def test_phishing_resistant_row_is_kept_when_the_methods_read_is_denied(monkeypatch):
+    # graph_get returns an error payload (it does not raise) on a 403 from
+    # authentication/methods; that is unknown too, not "no methods".
+    upserts: list[dict] = []
+
+    async def denied_methods(db, tenant, path):
+        return {"status": "error", "code": 403, "reason": "access_denied"}
+
+    async def recording_upsert(**kwargs):
+        upserts.append(kwargs)
+        return SimpleNamespace(id=1)
+
+    resolves = await _scan(
+        monkeypatch,
+        users=[_user(ADMIN)],
+        controls={"IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA"},
+        graph_get=denied_methods,
+        upsert_control_result=recording_upsert,
+    )
+
+    assert [u for u in upserts if u["control_id"] == "IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA"] == []
+    assert resolves["IDENTITY_ADMIN_NO_PHISHING_RESISTANT_MFA"] == [{ADMIN}]
