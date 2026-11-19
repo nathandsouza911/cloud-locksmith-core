@@ -18,3 +18,9 @@ class TenantGraphContext:
     # Injected by the caller (already fetched once earlier in the scan) rather
     # than re-fetched here. True/False = known state, None = unknown/unfetched.
     security_defaults_enabled: bool | None = None
+
+    # Membership for group and role exclusions: group id -> user ids (nested),
+    # role template id -> user ids. None = not read, so a policy that excludes
+    # by group or role cannot be evaluated.
+    group_member_map: dict[str, list[str]] | None = None
+    role_member_map: dict[str, list[str]] | None = None
