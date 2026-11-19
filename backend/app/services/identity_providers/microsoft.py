@@ -196,7 +196,7 @@ class MicrosoftIdentityProviderAdapter(IdentityProviderAdapter):
         )
         return await self.post(
             "/identity/conditionalAccess/policies",
-            validated.model_dump(mode="json"),
+            validated.model_dump(mode="json", exclude_none=True),
         )
 
     async def update_conditional_access_policy(
@@ -221,7 +221,7 @@ class MicrosoftIdentityProviderAdapter(IdentityProviderAdapter):
         )
         return await self.patch(
             f"/identity/conditionalAccess/policies/{policy_id}",
-            validated.model_dump(mode="json"),
+            validated.model_dump(mode="json", exclude_none=True),
         )
 
     async def delete_conditional_access_policy(self, policy_id: str) -> dict[str, Any]:
