@@ -29,7 +29,12 @@ from app.services.detection.illicit_consent_grants_detector import (
 from app.services.detection.oauth_app_consent_discovery_detector import (
     detect_oauth_app_consent,
 )
-from app.services.graph_client import _extract_graph_error_code, graph_get, graph_get_all, graph_get_with_token
+from app.services.graph_client import (
+    _extract_graph_error_code,
+    graph_get,
+    graph_get_all,
+    graph_get_all_with_token,
+)
 from app.services.detection.password_never_expires_detector import evaluate_password_never_expires
 from app.services.detection.app_secret_expiry_detector import evaluate_all_app_secret_expiry
 from app.services.detection.stale_service_principal_detector import (
@@ -143,21 +148,22 @@ async def _safe_upsert_control_result(db: AsyncSession, **kwargs):
 
 
 async def _build_role_map(db: AsyncSession, tenant) -> dict[str, list[dict[str, str]]]:
-    roles_payload = await graph_get(db, tenant, "/directoryRoles")
+    # Every page of roles and of each role's members: a missed role holder is
+    # a missed admin.
+    roles = await graph_get_all(db, tenant, "/directoryRoles")
     role_map: dict[str, list[dict[str, str]]] = {}
 
-    for role in roles_payload.get("value", []):
+    for role in roles:
         role_name = role.get("displayName")
         role_id = role.get("id")
         if not role_name or not role_id:
             continue
 
-        members_payload = await graph_get(
+        members = await graph_get_all(
             db,
             tenant,
             f"/directoryRoles/{role_id}/members?$select=id,displayName,userPrincipalName",
         )
-        members = members_payload.get("value", []) or []
         for member in members:
             if member.get("@odata.type") not in (None, "#microsoft.graph.user"):
                 continue
@@ -202,13 +208,7 @@ MAIL_RULES_TIMEOUT_SECONDS = 10
 
 
 async def _get_all_with_token(access_token: str, path: str, tenant_id: str) -> list[dict]:
-    results: list[dict] = []
-    next_path: str | None = path
-    while next_path:
-        page = await graph_get_with_token(access_token, next_path, expected_tenant_id=tenant_id)
-        results.extend(page.get("value", []))
-        next_path = page.get("@odata.nextLink")
-    return results
+    return await graph_get_all_with_token(access_token, path, expected_tenant_id=tenant_id)
 
 
 async def _fetch_inbox_rules(*, db, tenant, users: list[dict]) -> tuple[dict[str, list[dict]], list[str]]:

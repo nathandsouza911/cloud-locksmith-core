@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.services import graph_client
 from app.services import identity_scan_service as scan
 
 TENANT = SimpleNamespace(id="tenant-mail")
@@ -40,7 +41,7 @@ def fake_graph(monkeypatch):
         return {"value": [{"id": f"rule-for-{path.split('/')[2]}"}]}
 
     monkeypatch.setattr(scan, "get_valid_access_token", AsyncMock(return_value="token"))
-    monkeypatch.setattr(scan, "graph_get_with_token", fake_get_with_token)
+    monkeypatch.setattr(graph_client, "graph_get_with_token", fake_get_with_token)
     monkeypatch.setattr(scan, "MAIL_RULES_TIMEOUT_SECONDS", 0.6)
     monkeypatch.setattr(scan, "MAIL_RULES_CONCURRENCY", 5)
     return calls
@@ -91,7 +92,7 @@ def test_failure_log_names_the_graph_status_and_error_code(monkeypatch, caplog):
         )
 
     monkeypatch.setattr(scan, "get_valid_access_token", AsyncMock(return_value="token"))
-    monkeypatch.setattr(scan, "graph_get_with_token", fake_get_with_token)
+    monkeypatch.setattr(graph_client, "graph_get_with_token", fake_get_with_token)
 
     with caplog.at_level("WARNING"):
         rules, unavailable = asyncio.run(scan._fetch_inbox_rules(db=None, tenant=TENANT, users=[_user("u1")]))
