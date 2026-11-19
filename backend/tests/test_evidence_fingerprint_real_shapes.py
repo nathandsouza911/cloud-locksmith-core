@@ -158,7 +158,9 @@ def test_opening_guest_invites_changes_the_fingerprint():
     control = "IDENTITY_GUEST_INVITES_OPEN"
     closed = _real_default_controls(allow_invites_from="adminsOnly")[control]
     opened = _real_default_controls(allow_invites_from="everyone")[control]
-    assert _fp(closed, control_id=control, resource_id="tenant") != _fp(opened, control_id=control, resource_id="tenant")
+    assert _fp(closed, control_id=control, resource_id="tenant") != _fp(
+        opened, control_id=control, resource_id="tenant"
+    )
 
 
 def test_app_secret_expiry_has_no_allowlist_that_cannot_match_its_tenant_level_evidence(caplog):
