@@ -243,8 +243,9 @@ def test_analyze_logs_warning_when_activity_reports_unavailable(caplog):
     assert any("activity" in r.message.lower() and "unavailable" in r.message.lower() for r in caplog.records)
 
 
-def test_inactive_user_metadata_flags_activity_unavailable():
-    """When activity data is absent, INACTIVE_USER findings must note it in metadata."""
+def test_no_inactive_user_findings_when_activity_unavailable():
+    """Review R2-18: with no activity report, "inactive" is unknown. The old
+    creation-date fallback flagged every licensed user older than 30 days."""
     raw_data = {
         "users": [
             {
@@ -273,5 +274,35 @@ def test_inactive_user_metadata_flags_activity_unavailable():
         now=datetime(2026, 5, 29),
     )
     inactive = [f for f in findings if f["type"] == LicenseFindingType.INACTIVE_USER]
-    assert len(inactive) == 1
-    assert inactive[0]["metadata"].get("activity_data_available") is False
+    assert inactive == []
+
+
+def test_no_inactive_user_findings_when_report_names_are_concealed():
+    """With the Microsoft 365 report privacy setting on, user names in the report
+    are replaced by hashes, so no row matches a user: also unknown, not inactive."""
+    raw_data = {
+        "users": [
+            {
+                "id": "u1",
+                "userPrincipalName": "old@contoso.com",
+                "createdDateTime": "2024-01-01T00:00:00Z",
+                "assignedLicenses": [{"skuId": "06ebc4ee-1bb5-47dd-8120-11324bc54e06"}],
+            }
+        ],
+        "subscribed_skus": [
+            {
+                "skuId": "06ebc4ee-1bb5-47dd-8120-11324bc54e06",
+                "skuPartNumber": "SPE_E5",
+                "prepaidUnits": {"enabled": 5},
+                "consumedUnits": 5,
+            }
+        ],
+        "office365_active_user_detail": [
+            {"user_principal_name": "6D2B3A1F0C9E4E7A8B5D1C2E3F4A5B6C", "last_activity_date": "2026-05-20"}
+        ],
+        "office365_active_user_detail_available": True,
+        "m365_app_user_counts": [],
+        "m365_app_user_counts_available": True,
+    }
+    findings = analyze_license_data(tenant_id="tenant-x", raw_data=raw_data, now=datetime(2026, 5, 29))
+    assert [f for f in findings if f["type"] == LicenseFindingType.INACTIVE_USER] == []
