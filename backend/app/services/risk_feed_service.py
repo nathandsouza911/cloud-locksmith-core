@@ -11,7 +11,6 @@ from app.services.compliance_enrichment import get_framework_mappings
 from app.services.graph_client import GraphAPIError, graph_get
 from app.services.graph_client import graph_error_ui_label
 from app.services.license_service import control_license_satisfied, control_requires_p1, get_tenant_license
-from app.services.posture_snapshot_service import get_latest_posture_snapshot
 from app.services.remediation.lifecycle import current_remediation_status
 from app.services.scoring.identity_risk_score import build_risk_summary, calculate_fix_impact
 from app.services.scoring.remediation_priority_model import (
@@ -160,13 +159,12 @@ async def get_risk_feed(
     attack_path_controls = attack_path_summary.get("affected_controls") or set()
     critical_attack_path_controls = attack_path_summary.get("critical_controls") or set()
 
-    latest_snapshot = get_latest_posture_snapshot(db, tenant_id)
-    latest_posture = latest_snapshot.posture if latest_snapshot and isinstance(latest_snapshot.posture, dict) else {}
     tenant_record = db.get(Tenant, tenant_id)
     current_results = [compliance for compliance, _tenant_name in rows]
-    current_score = latest_posture.get("score")
-    if current_score is None:
-        current_score = build_risk_summary(current_results)["score"]
+    # The impact of a fix is the score of these rows with it fixed minus the
+    # score of the same rows now. The posture snapshot scores a different set
+    # (every result, the active baseline), so it must not be the baseline here.
+    current_score = build_risk_summary(current_results)["score"]
 
     try:
         tenant_license = await get_tenant_license(
