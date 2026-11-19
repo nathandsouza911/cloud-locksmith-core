@@ -121,15 +121,19 @@ The dump contains your tenant data and the encrypted delegated tokens; the key t
 decrypts them is in `cloud-locksmith.env`. Store the dump safely, outside the repository,
 and keep both private.
 
-To restore a dump into the running database:
+To restore a dump, stop the API first so nothing writes while the database is replaced,
+then restore in a single transaction so a failure leaves the database unchanged:
 
 ```
+docker compose stop api
 docker compose cp <dump file> postgres:/tmp/cl.dump
-docker compose exec -T postgres pg_restore -U cloudlocksmith -d cloudlocksmith --clean --if-exists /tmp/cl.dump
+docker compose exec -T postgres pg_restore -U cloudlocksmith -d cloudlocksmith --clean --if-exists --single-transaction /tmp/cl.dump
+docker compose up -d
 ```
 
-A dump restored to another install needs the same `cloud-locksmith.env`, or its tokens
-cannot be decrypted.
+The dump must come from the same release as the install you restore into, because the
+schema is versioned. A dump restored to another install also needs the same
+`cloud-locksmith.env`, or its tokens cannot be decrypted.
 
 ## Troubleshooting
 
