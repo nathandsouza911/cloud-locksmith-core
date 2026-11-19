@@ -500,17 +500,23 @@ def _normalize_memberof_directory_roles(payload: dict[str, Any] | None) -> list[
         if not isinstance(role_id, str) or not role_id:
             continue
         display_name = item.get("displayName")
+        template_id = item.get("roleTemplateId")
         normalized.append(
             {
                 "id": role_id,
                 "displayName": display_name if isinstance(display_name, str) else "",
+                "roleTemplateId": template_id if isinstance(template_id, str) else "",
                 "type": "directoryRole",
             }
         )
     return normalized
 
 
-async def fetch_user_memberof_directory_roles(db, tenant: Tenant, user_id: str) -> list[dict[str, str]]:
+async def fetch_user_memberof_directory_roles(
+    db, tenant: Tenant, user_id: str, *, raise_on_error: bool = False
+) -> list[dict[str, str]]:
+    """A user's directory roles. By default a failed read returns [] (legacy callers);
+    pass raise_on_error=True wherever "no roles" would allow a change (offboarding)."""
     path = f"/users/{user_id}/memberOf"
     try:
         payload = await graph_get(db, tenant, path)
@@ -529,6 +535,8 @@ async def fetch_user_memberof_directory_roles(db, tenant: Tenant, user_id: str) 
             payload = await graph_get(db, tenant, path)
             return _normalize_memberof_directory_roles(payload)
         except Exception:
+            if raise_on_error:
+                raise
             return []
 
 

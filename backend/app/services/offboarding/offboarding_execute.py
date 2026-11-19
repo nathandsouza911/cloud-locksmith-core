@@ -9,6 +9,11 @@ from app.services.graph_client import (
     set_user_account_enabled_for_tenant,
     validate_required_graph_permissions,
 )
+from app.services.offboarding.offboarding_guard import (
+    OffboardingRefused,
+    assert_not_break_glass,
+    assert_not_last_global_admin,
+)
 from app.services.offboarding.offboarding_snapshot import snapshot_user_state
 from app.services.token_manager import get_valid_access_token
 from app.services.remediation.admin_roles.admin_role_execute import (
@@ -39,6 +44,15 @@ async def execute_offboarding(
     executed: list[str] = []
     audit_entry = None
 
+    try:
+        assert_not_break_glass(db=db, tenant_id=tenant.id, user_id=user_id)
+    except OffboardingRefused:
+        return {
+            "status": "blocked",
+            "reason": "Target user is a registered break-glass account",
+            "executed_actions": executed,
+        }
+
     snapshot = await snapshot_user_state(db, tenant, user_id)
 
     if not snapshot.get("account_enabled", True):
@@ -54,6 +68,13 @@ async def execute_offboarding(
             "reason": "Target user is privileged (admin role)",
             "executed_actions": executed,
         }
+
+    if options.get("remove_admin_roles", True) and snapshot["roles"]:
+        # Before any write (sessions are revoked first below).
+        try:
+            await assert_not_last_global_admin(db=db, tenant=tenant, user_id=user_id, roles=snapshot["roles"])
+        except OffboardingRefused as exc:
+            return {"status": "blocked", "reason": str(exc), "executed_actions": executed}
 
     access_token = await get_valid_access_token(tenant.id, db=db)
     claims = await get_tenant_graph_token_claims(db=db, tenant=tenant)
