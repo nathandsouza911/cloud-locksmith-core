@@ -97,3 +97,38 @@ def test_missing_created_date_is_medium_and_fails():
     assert result["decision_status"] == "PENDING"
     assert result["evidence"]["reason"] == "missing_created_date"
     assert result["evidence"]["tier"] == "MEDIUM"
+
+
+# Review R2-14: brand-new accounts and the domain part of the UPN.
+
+_NO_WORKLOAD = {
+    "last_activity": None,
+    "exchange_activity": False,
+    "non_email_activity": False,
+    "workload_activity": False,
+}
+
+
+def test_new_account_without_sign_in_is_not_flagged():
+    result = evaluate_unused_account(
+        _user(createdDateTime="2026-05-24T00:00:00Z"), _NO_WORKLOAD, workload_available=True, now=NOW
+    )
+    assert result["passed"] is True
+    assert result["evidence"]["reason"] == "new_account"
+
+
+def test_account_younger_than_high_threshold_is_at_most_medium():
+    # 75 days old, never used: dormant (60 days) but cannot be 90 days unused.
+    result = evaluate_unused_account(
+        _user(createdDateTime="2026-03-15T00:00:00Z"), _NO_WORKLOAD, workload_available=True, now=NOW
+    )
+    assert result["passed"] is False
+    assert result["severity"] == "MEDIUM"
+
+
+def test_service_keyword_in_the_domain_does_not_skip_the_user():
+    result = evaluate_unused_account(
+        _user(userPrincipalName="alice@contoso-services.com"), _NO_WORKLOAD, workload_available=True, now=NOW
+    )
+    assert result["passed"] is False
+    assert result["evidence"].get("reason") != "service_account"

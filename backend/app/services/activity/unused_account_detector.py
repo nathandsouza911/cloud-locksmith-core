@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from app.services.activity.identity_activity_engine import score_activity
+from app.services.activity.identity_activity_engine import HIGH_DAYS, MEDIUM_DAYS, score_activity
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,14 @@ def _skip(user: dict, reason: str, **extra) -> dict:
     }
 
 
+def _parse_created(raw) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 def evaluate_unused_account(
     user: dict,
     workload_activity: dict[str, Any] | None,
@@ -56,7 +64,10 @@ def evaluate_unused_account(
     display = (user.get("displayName") or "").lower()
     if "#ext#" in upn:
         return _skip(user, "guest_account")
-    if any(keyword in upn or keyword in display for keyword in SERVICE_KEYWORDS):
+    # Only the local part: a keyword in the domain ("contoso-services.com")
+    # would skip every user in the tenant.
+    local_part = upn.split("@", 1)[0]
+    if any(keyword in local_part or keyword in display for keyword in SERVICE_KEYWORDS):
         return _skip(user, "service_account")
 
     created_raw = user.get("createdDateTime")
@@ -75,7 +86,15 @@ def evaluate_unused_account(
             },
         }
 
+    created_at = _parse_created(created_raw)
+    age_days = (now - created_at).total_seconds() / 86400 if created_at else None
+    # An account cannot have been unused for longer than it has existed.
+    if age_days is not None and age_days < MEDIUM_DAYS:
+        return _skip(user, "new_account", account_age_days=int(age_days))
+
     profile = score_activity(user, workload_activity, workload_available=workload_available, now=now)
+    if profile["tier"] == "HIGH" and age_days is not None and age_days < HIGH_DAYS:
+        profile = {**profile, "tier": "MEDIUM"}
     passed, severity, decision_status = _TIER_MAP[profile["tier"]]
 
     logger.info(
