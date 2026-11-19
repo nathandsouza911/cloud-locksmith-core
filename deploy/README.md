@@ -152,21 +152,29 @@ authentication and returns `401`, which is expected.
 ## Uninstall
 
 1. Stop the stack and delete its data (this removes the database, including scan results
-   and the encrypted tokens):
+   and the encrypted tokens). Do this first: Compose needs the two env files to run.
+   `--profile setup` also removes the network created by the setup run. To stop without
+   deleting data, run it without `-v`.
    ```
    cd deploy
-   docker compose down -v
+   docker compose --profile setup down -v
+   ```
+2. Remove the app registration from the tenant. Setup signs in with a device code, checks
+   that it is the tenant in your config, shows the app and asks `[y/N]` (`--yes` skips the
+   question, and is required without a terminal). It deletes only an app whose client ID is
+   in your config and whose name is **Cloud Locksmith (local)**, which also removes its
+   enterprise application and the admin consent granted to it, then purges both copies from
+   the recycle bin:
+   ```
+   docker compose run --rm setup --uninstall
+   ```
+   If the purge fails (it needs the account to be allowed to), the app is still deleted and
+   stays in the recycle bin for 30 days; remove it sooner under **App registrations >
+   Deleted applications** (and **Enterprise applications > Deleted applications**).
+3. Delete the local config (setup leaves it in place):
+   ```
    rm cloud-locksmith.env cloud-locksmith-db.env
    ```
-2. In the Entra admin center, open **App registrations**, find **Cloud Locksmith
-   (local)** and delete it. This also removes its enterprise application and the admin
-   consent that was granted to it.
-3. Deleted apps stay in the recycle bin for 30 days. To remove it now, open **App
-   registrations > Deleted applications**, select the app and choose **Delete
-   permanently**. Do the same under **Enterprise applications > Deleted applications**
-   if the service principal is listed there.
-
-Setup has no uninstall command, so the app registration is removed by hand.
 
 ## Troubleshooting
 
@@ -189,16 +197,3 @@ Setup has no uninstall command, so the app registration is removed by hand.
   a loopback address ([moby/moby#45610](https://github.com/moby/moby/issues/45610), fixed
   in 28.0.0). Use Docker Engine 28 or later (`docker version`), or block the ports with a
   host firewall.
-
-## Uninstall
-
-```
-cd deploy
-docker compose --profile setup down -v
-```
-
-`--profile setup` also removes the network created by the setup run; `-v` deletes the
-database volume and all local data. Then delete `deploy/cloud-locksmith.env` and
-`deploy/cloud-locksmith-db.env`, and delete the app registration **Cloud Locksmith
-(local)** in the Entra admin centre (App registrations). To stop without deleting data,
-run `docker compose --profile setup down` without `-v`.

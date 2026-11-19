@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+* **`setup --uninstall`** deletes the app registration from the tenant and purges its
+  recycle-bin copies (app and enterprise application). It signs in, checks the tenant against
+  the config, deletes only an app whose client ID is in the config and whose name is "Cloud
+  Locksmith (local)", and asks `[y/N]` first (`--yes` skips it). It leaves the local env files
+  for `docker compose --profile setup down -v`, which needs them. Unit-tested; not yet run
+  against a real tenant.
 * The warning logged when a user's inbox rules cannot be read
   (`mail_forwarding_rule_fetch_failed`) now includes the Graph status code and error code
   (never the response body), so the cause of a skipped mailbox is visible in the log.
@@ -141,7 +147,6 @@
   secret-expiry finding for the instance's own app, executing a fix from the dashboard, and the
   `[y/N]` confirmation (unit-tested only). The rest of the setup, the Preview scan, the full
   connect and the cleanup were run on 2026-11-19.
-* **Setup has no uninstall command.** `deploy/README.md` lists the manual steps.
 
 ## 0.1.2 (2026-11-15)
 
