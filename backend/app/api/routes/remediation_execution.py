@@ -140,6 +140,17 @@ def _summarize_break_glass_preview(
 # Each finding must be approved and executed individually.
 
 
+# The only request key an executor may see. Everything else a fix acts on comes from
+# the finding's own evidence: a client-supplied sp_id, user_id, illicit_grants,
+# allowInvitesFrom or snapshot would otherwise override it and change a different
+# object (or invert the fix). selected_roles is checked against the approval.
+_CLIENT_EXECUTION_KEYS = ("selected_roles",)
+
+
+def _client_execution_payload(payload: dict) -> dict:
+    return {key: payload[key] for key in _CLIENT_EXECUTION_KEYS if key in payload}
+
+
 @router.post("/{compliance_result_id}/execute")
 async def execute_remediation_endpoint(
     request: Request,
@@ -156,7 +167,7 @@ async def execute_remediation_endpoint(
         except Exception:
             parsed_payload = {}
 
-        payload = parsed_payload if isinstance(parsed_payload, dict) else {}
+        payload = _client_execution_payload(parsed_payload if isinstance(parsed_payload, dict) else {})
         selected_roles = payload.get("selected_roles", [])
 
         logger.debug(
@@ -185,7 +196,7 @@ async def execute_remediation_endpoint(
                     RemediationGraphClient(db=db, tenant=current_tenant),
                     {
                         **(compliance.evidence or {}),
-                        **payload,
+                        **payload,  # selected_roles only (_client_execution_payload)
                         "resource_id": compliance.resource_id,
                         "control_id": compliance.control_id,
                     },
@@ -394,7 +405,7 @@ async def create_break_glass_accounts(
             compliance_result_id=compliance.id,
             tenant=current_tenant,
             tenant_id=request.state.tenant_id,
-            execution_payload=payload,
+            execution_payload={},
             allow_failed_retry=True,
         )
 
