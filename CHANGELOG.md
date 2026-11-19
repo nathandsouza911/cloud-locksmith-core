@@ -108,6 +108,31 @@
   Exclusions such as break-glass accounts are still allowed. Policies created by Apply
   include all users and still pass.
 
+### Known issues in 0.2.0
+
+* **The startup warning about `REMEDIATION_DRY_RUN` is misleading.** In production mode (which
+  the one-command setup uses) the API logs `REMEDIATION_DRY_RUN=True ... remediations will NOT
+  be applied`. That setting is only read by this warning and does not stop anything;
+  `docs/remediation-lifecycle.md` says so. Auto-remediation is controlled by
+  `ENABLE_AUTO_REMEDIATION` (off in the generated config), and every executed fix needs an
+  approval. Do not rely on the log line.
+* **Mail-forwarding rules are not checked for some users.** In a live scan of one small tenant,
+  the per-mailbox fetch failed for 6 to 7 users (`mail_forwarding_rule_fetch_failed`,
+  `GraphAPIError`), including after `MailboxSettings.Read` was consented. The scan skips those
+  users and continues. The cause was not looked into (users without a mailbox are one
+  possibility, not confirmed), so do not read a clean forwarding result as full coverage.
+* **One usage-report call returned 403 during a Preview scan** (`S2SUnauthorized` on
+  `getOffice365ActiveUserDetail`). It did not recur on the full connect.
+* **Log noise:** `evidence_fingerprint_allowlist_unmatched` is logged for
+  `IDENTITY_APP_SECRET_EXPIRING_SOON`, `IDENTITY_USER_CONSENT_POLICY` and
+  `IDENTITY_GUEST_INVITES_OPEN`. The declared evidence keys do not match the keys those controls
+  produce, so the fingerprint falls back to the full payload. It predates this release.
+* **Not yet run against a real tenant:** `setup --rotate-secret`, `setup --tenant`, the
+  secret-expiry finding for the instance's own app, executing a fix from the dashboard, and the
+  `[y/N]` confirmation (unit-tested only). The rest of the setup, the Preview scan, the full
+  connect and the cleanup were run on 2026-11-19.
+* **Setup has no uninstall command.** `deploy/README.md` lists the manual steps.
+
 ## 0.1.2 (2026-11-15)
 
 * The API (`GET /` and the OpenAPI page) and the dashboard package now report the release
