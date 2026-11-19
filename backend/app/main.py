@@ -31,7 +31,7 @@ if settings.DEMO_MODE:
     install_outbound_block()
 
 # Release version; tests/test_version_consistency.py keeps README, compose and package.json in step.
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.2.0"
 
 app = FastAPI(title=settings.APP_NAME, version=APP_VERSION)
 logger = logging.getLogger(__name__)

@@ -9,7 +9,7 @@ run it across client tenants.
 requests (a full connect includes write scopes), what it stores, what it can change and
 the gates in front of that, and how to delete its data and revoke its access.
 
-Status: **0.1.2**. AGPL-3.0. See `CHANGELOG.md` for what changed since the first open-source release (0.1.0).
+Status: **0.2.0**. AGPL-3.0. See `CHANGELOG.md` for what changed since the first open-source release (0.1.0).
 
 ## Try the demo (no Microsoft account needed)
 
