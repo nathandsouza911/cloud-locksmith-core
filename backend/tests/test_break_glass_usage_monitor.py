@@ -281,3 +281,88 @@ def test_run_break_glass_monitor_continues_after_tenant_failure(monkeypatch, cap
 
     assert processed == ["tenant-1", "tenant-2"]
     assert "break_glass_monitor_tenant_failed tenant_id=tenant-1 error=boom" in caplog.text
+
+
+def _fmt(value) -> str:
+    return value.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def test_monitor_alerts_on_sign_in_that_arrives_after_an_empty_poll(db_session):
+    # Review R2-9: an empty poll moves the checkpoint to "now". A sign-in from
+    # before that checkpoint that reaches the log late must still alert.
+    now = utc_now()
+    tenant = _create_tenant(
+        db_session,
+        "tenant-break-glass-late-event",
+        asset_flags={"break_glass_last_signin_check": _fmt(now)},
+    )
+    db_session.add(BreakGlassAccount(tenant_id=tenant.id, user_external_id="bg-user-1"))
+    db_session.commit()
+
+    alerts = asyncio.run(
+        monitor_break_glass_account_usage(
+            db=db_session,
+            tenant=tenant,
+            sign_in_events=[
+                {
+                    "id": "late-event-1",
+                    "createdDateTime": _fmt(now - timedelta(minutes=15)),
+                    "userId": "bg-user-1",
+                    "userPrincipalName": "bg-admin-1@contoso.onmicrosoft.com",
+                }
+            ],
+        )
+    )
+
+    assert len(alerts) == 1
+    assert db_session.query(BreakGlassUsageEvent).filter(BreakGlassUsageEvent.tenant_id == tenant.id).count() == 1
+
+
+def test_monitor_queries_graph_with_late_arrival_overlap(db_session, monkeypatch):
+    now = utc_now()
+    tenant = _create_tenant(
+        db_session,
+        "tenant-break-glass-overlap-query",
+        asset_flags={"break_glass_last_signin_check": _fmt(now)},
+    )
+    db_session.add(BreakGlassAccount(tenant_id=tenant.id, user_external_id="bg-user-1"))
+    db_session.commit()
+
+    paths: list[str] = []
+
+    async def fake_graph_get_all(db, tenant, path):
+        paths.append(path)
+        return []
+
+    monkeypatch.setattr("app.services.break_glass_usage_monitor.graph_get_all", fake_graph_get_all)
+
+    asyncio.run(monitor_break_glass_account_usage(db=db_session, tenant=tenant))
+
+    assert len(paths) == 1
+    from urllib.parse import unquote
+
+    assert f"createdDateTime ge {_fmt(now - timedelta(hours=2))}" in unquote(paths[0])
+
+
+def test_monitor_alerts_once_when_overlap_rereads_the_same_event(db_session):
+    now = utc_now()
+    tenant = _create_tenant(
+        db_session,
+        "tenant-break-glass-overlap-dedupe",
+        asset_flags={"break_glass_last_signin_check": _fmt(now)},
+    )
+    db_session.add(BreakGlassAccount(tenant_id=tenant.id, user_external_id="bg-user-1"))
+    db_session.commit()
+    event = {
+        "id": "late-event-2",
+        "createdDateTime": _fmt(now - timedelta(minutes=30)),
+        "userId": "bg-user-1",
+        "userPrincipalName": "bg-admin-1@contoso.onmicrosoft.com",
+    }
+
+    first = asyncio.run(monitor_break_glass_account_usage(db=db_session, tenant=tenant, sign_in_events=[event]))
+    second = asyncio.run(monitor_break_glass_account_usage(db=db_session, tenant=tenant, sign_in_events=[event]))
+
+    assert len(first) == 1
+    assert second == []
+    assert db_session.query(Alert).filter(Alert.tenant_id == tenant.id).count() == 1
