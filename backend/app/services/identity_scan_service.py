@@ -29,7 +29,7 @@ from app.services.detection.illicit_consent_grants_detector import (
 from app.services.detection.oauth_app_consent_discovery_detector import (
     detect_oauth_app_consent,
 )
-from app.services.graph_client import graph_get, graph_get_all, graph_get_with_token
+from app.services.graph_client import _extract_graph_error_code, graph_get, graph_get_all, graph_get_with_token
 from app.services.detection.password_never_expires_detector import evaluate_password_never_expires
 from app.services.detection.app_secret_expiry_detector import evaluate_all_app_secret_expiry
 from app.services.detection.stale_service_principal_detector import (
@@ -237,10 +237,12 @@ async def _fetch_inbox_rules(*, db, tenant, users: list[dict]) -> tuple[dict[str
                 return user_id, rules
             except Exception as exc:  # noqa: BLE001 - one mailbox must not stop the scan
                 logger.warning(
-                    "mail_forwarding_rule_fetch_failed tenant_id=%s user_id=%s error=%s",
+                    "mail_forwarding_rule_fetch_failed tenant_id=%s user_id=%s error=%s status=%s graph_error_code=%s",
                     tenant.id,
                     user_id,
                     type(exc).__name__,
+                    getattr(exc, "status_code", None),
+                    _extract_graph_error_code(getattr(exc, "response_body", "") or ""),
                 )
                 return user_id, None
 

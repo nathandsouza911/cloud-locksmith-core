@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+* The warning logged when a user's inbox rules cannot be read
+  (`mail_forwarding_rule_fetch_failed`) now includes the Graph status code and error code
+  (never the response body), so the cause of a skipped mailbox is visible in the log.
+* The one Preview usage-report 403 is not a defect in this code: the report call fails
+  soft (the unused-account control then runs without workload activity and says so), and
+  Microsoft returned `S2SUnauthorized` for the reports service itself.
+
 ## 0.2.0 (2026-11-19)
 
 * **One-command setup for a single tenant** (`deploy/`): `docker compose run --rm setup`
