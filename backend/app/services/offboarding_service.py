@@ -17,6 +17,7 @@ from app.services.graph_client import (
     graph_get,
     graph_post,
 )
+from app.services.offboarding.offboarding_guard import assert_not_break_glass, assert_not_last_global_admin
 from app.services.offboarding.offboarding_snapshot import snapshot_user_state
 from app.services.remediation.admin_roles.admin_role_verifier import AdminRoleVerifier
 from app.services.remediation.lifecycle import (
@@ -536,6 +537,7 @@ def _set_remediation_ready_for_execution(db: Session, compliance: ComplianceResu
 
 
 async def _execute_user_action(*, db: Session, tenant, action: str, user_id: str) -> dict[str, Any]:
+    assert_not_break_glass(db=db, tenant_id=tenant.id, user_id=user_id)
     graph_client = RemediationGraphClient(db=db, tenant=tenant)
     await _log_offboarding_step_context(
         db=db,
@@ -545,14 +547,11 @@ async def _execute_user_action(*, db: Session, tenant, action: str, user_id: str
     )
 
     if action == "remove_admin_roles":
-        current_roles = await fetch_user_memberof_directory_roles(
-            db,
-            tenant,
-            user_id,
-        )
+        current_roles = await fetch_user_memberof_directory_roles(db, tenant, user_id, raise_on_error=True)
         role_ids = [role.get("id") for role in current_roles if role.get("id")]
         if not role_ids:
             return {"status": "SUCCESS", "skipped": "no_admin_roles"}
+        await assert_not_last_global_admin(db=db, tenant=tenant, user_id=user_id, roles=current_roles)
         execution = await AdminRoleExecutor().execute(
             graph_client,
             {
@@ -611,11 +610,7 @@ async def _execute_user_action(*, db: Session, tenant, action: str, user_id: str
         return {"status": "SUCCESS"}
 
     if action == "disable_account":
-        remaining_roles = await fetch_user_memberof_directory_roles(
-            db,
-            tenant,
-            user_id,
-        )
+        remaining_roles = await fetch_user_memberof_directory_roles(db, tenant, user_id, raise_on_error=True)
         if remaining_roles:
             logger.warning(
                 "offboarding_disable_blocked %s",

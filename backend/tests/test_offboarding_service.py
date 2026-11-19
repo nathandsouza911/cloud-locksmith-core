@@ -482,7 +482,7 @@ def test_rollback_user_offboarding_reopens_user_findings(db_session, monkeypatch
     async def fake_enable_user(**kwargs):
         return {"status": "SUCCESS"}
 
-    async def fake_fetch_roles(db, tenant, user_id):
+    async def fake_fetch_roles(db, tenant, user_id, **kwargs):
         return []
 
     monkeypatch.setattr(
@@ -526,7 +526,7 @@ def test_user_offboarding_role_removal_requires_verification(db_session, monkeyp
 
     remove_roles_step = session["steps"][0]["id"]
 
-    async def fake_fetch_roles(db, tenant, user_id):
+    async def fake_fetch_roles(db, tenant, user_id, **kwargs):
         return [{"id": "role-1", "displayName": "Global Administrator"}]
 
     async def fake_execute(self, graph_client, evidence):
@@ -575,7 +575,7 @@ def test_disable_account_is_blocked_when_admin_roles_still_present(db_session, m
 
     disable_step = session["steps"][2]["id"]
 
-    async def fake_fetch_roles(db, tenant, user_id):
+    async def fake_fetch_roles(db, tenant, user_id, **kwargs):
         return [{"id": "role-1", "displayName": "Global Administrator"}]
 
     monkeypatch.setattr(offboarding_service, "fetch_user_memberof_directory_roles", fake_fetch_roles)

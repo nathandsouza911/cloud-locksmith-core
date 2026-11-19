@@ -3,7 +3,8 @@ from app.services.graph_client import fetch_user_memberof_directory_roles, graph
 
 async def snapshot_user_state(db, tenant, user_id: str):
     user = await graph_get(db, tenant, f"/users/{user_id}")
-    roles = await fetch_user_memberof_directory_roles(db, tenant, user_id)
+    # An unreadable role list must not look like "not an admin".
+    roles = await fetch_user_memberof_directory_roles(db, tenant, user_id, raise_on_error=True)
 
     return {
         "user_id": user_id,

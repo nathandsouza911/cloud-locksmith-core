@@ -155,6 +155,10 @@ def test_offboarding_aborts_when_audit_persistence_fails(monkeypatch):
     monkeypatch.setattr(offboarding_execute, "get_valid_access_token", fake_token)
     monkeypatch.setattr(offboarding_execute, "get_tenant_graph_token_claims", fake_claims)
     monkeypatch.setattr(offboarding_execute, "validate_required_graph_permissions", lambda **k: {})
+    # No database here: the break-glass registry is empty.
+    monkeypatch.setattr(
+        "app.services.offboarding.offboarding_guard.list_break_glass_user_ids", lambda *, db, tenant_id: []
+    )
 
     def raising_audit(**kwargs):
         raise AuditPersistenceError("audit unavailable")
