@@ -6,7 +6,9 @@ def evaluate_identity_default_controls(snapshot: dict) -> list[dict]:
     default_permissions = authorization_policy.get("defaultUserRolePermissions") or {}
     permission_policies = default_permissions.get("permissionGrantPoliciesAssigned") or []
 
-    _PASSING_INVITE_POLICIES = {"adminsAndGuestInviters", "adminsOnly"}
+    # Graph values, strictest first: none, adminsAndGuestInviters,
+    # adminsGuestInvitersAndAllMembers, everyone.
+    _PASSING_INVITE_POLICIES = {"none", "adminsAndGuestInviters"}
     guest_invites_restricted = authorization_policy.get("allowInvitesFrom") in _PASSING_INVITE_POLICIES
 
     non_compliant_entries = [
