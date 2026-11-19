@@ -224,6 +224,33 @@ class MicrosoftIdentityProviderAdapter(IdentityProviderAdapter):
             validated.model_dump(mode="json", exclude_none=True),
         )
 
+    async def patch_conditional_access_exclude_users(
+        self,
+        policy_id: str,
+        exclude_users: list[str],
+    ) -> list[str]:
+        """PATCH only conditions.users.excludeUsers. Registered break-glass accounts
+        are always kept in the list, as on every other CA write."""
+        from app.schemas.graph_payloads import (
+            ConditionalAccessExcludeUsersPatchSchema,
+            validate_graph_payload,
+        )
+
+        if not isinstance(exclude_users, list):
+            raise ValueError("exclude_users must be a list of user ids")
+        body = {"conditions": {"users": {"excludeUsers": list(dict.fromkeys(exclude_users))}}}
+        # Validate the caller's ids before the merge can add anything to them.
+        validate_graph_payload(ConditionalAccessExcludeUsersPatchSchema, body, context="conditional_access_exclude")
+        body = merge_break_glass_exclusions(db=self.db, tenant_id=self.tenant.id, policy_payload=body)
+        validated = validate_graph_payload(
+            ConditionalAccessExcludeUsersPatchSchema,
+            body,
+            context="conditional_access_exclude",
+        )
+        payload = validated.model_dump(mode="json")
+        await self.patch(f"/identity/conditionalAccess/policies/{policy_id}", payload)
+        return list(payload["conditions"]["users"]["excludeUsers"])
+
     async def delete_conditional_access_policy(self, policy_id: str) -> dict[str, Any]:
         return await self.delete(f"/identity/conditionalAccess/policies/{policy_id}")
 
