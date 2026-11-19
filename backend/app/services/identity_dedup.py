@@ -6,7 +6,7 @@ from typing import Optional
 from sqlalchemy import desc, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from app.db.models.compliance_result import ComplianceResult
+from app.db.models.compliance_result import ComplianceResult, ExposureStatus
 from app.db.schema_guard import compliance_results_has_resource_id
 from app.services.remediation.lifecycle import (
     normalize_resolution_source,
@@ -18,6 +18,47 @@ class _ScanResult:
     def __init__(self, *, passed: bool, evaluated_at: datetime):
         self.passed = passed
         self.evaluated_at = evaluated_at
+
+
+# Evidence keys that describe an evaluation that could not be completed. A later real
+# result removes them.
+_UNKNOWN_EVIDENCE_KEYS = ("evaluation_status", "unknown_evaluation")
+
+
+def _apply_scan_result(existing, *, passed, evidence: dict, observed_at, decision_status) -> None:
+    """Apply one evaluation to the finding row.
+
+    ``passed=None`` means the control could not be evaluated (Graph error, missing
+    data). It must never open, reopen or resolve a finding: bool(None) used to turn it
+    into an ACTIVE FAIL. A finding that is failing keeps its last real failure;
+    anything else is stored as NOT_EVALUATED (passed=None, not ACTIVE). The caller's
+    evidence is kept under ``unknown_evaluation`` so the last real evidence survives.
+    """
+    if passed is None:
+        merged = dict(existing.evidence or {})
+        merged["resource_type"] = evidence.get("resource_type")
+        merged["resource_id"] = evidence.get("resource_id")
+        merged["evaluation_status"] = "unknown"
+        merged["unknown_evaluation"] = {
+            key: value for key, value in evidence.items() if key not in ("resource_type", "resource_id")
+        }
+        existing.evidence = merged
+        currently_failing = (
+            existing.passed is False
+            and getattr(existing.exposure_status, "value", existing.exposure_status) == ExposureStatus.ACTIVE.value
+        )
+        if not currently_failing:
+            existing.passed = None
+            existing.evaluated_at = observed_at
+            existing.exposure_status = ExposureStatus.RESOLVED
+        return
+
+    base = {key: value for key, value in (existing.evidence or {}).items() if key not in _UNKNOWN_EVIDENCE_KEYS}
+    existing.evidence = {**base, **evidence}
+    update_finding_state(existing, _ScanResult(passed=passed, evaluated_at=observed_at))
+    _stamp_decision_status(existing, passed=passed, decision_status=decision_status)
+    if existing.resolved_by:
+        existing.resolved_by = normalize_resolution_source(existing.resolved_by)
 
 
 # States where a scan is allowed to override decision_status.
@@ -68,7 +109,7 @@ async def upsert_control_result(
     *,
     tenant_id: str,
     control_id: str,
-    passed: bool,
+    passed: bool | None,
     severity: str,
     evidence: dict,
     decision_status: Optional[str] = None,
@@ -140,23 +181,16 @@ async def upsert_control_result(
 
         existing.resource_type = normalized_resource_type
         existing.severity = severity
-        existing.evidence = {
-            **(existing.evidence or {}),
-            **(evidence or {}),
-        }
         if has_resource_id:
             existing.resource_id = resource_key
 
-        update_finding_state(
+        _apply_scan_result(
             existing,
-            _ScanResult(
-                passed=passed,
-                evaluated_at=observed_at,
-            ),
+            passed=passed,
+            evidence=evidence,
+            observed_at=observed_at,
+            decision_status=decision_status,
         )
-        _stamp_decision_status(existing, passed=passed, decision_status=decision_status)
-        if existing.resolved_by:
-            existing.resolved_by = normalize_resolution_source(existing.resolved_by)
         await db.flush()
         return existing
     except IntegrityError:
@@ -167,23 +201,16 @@ async def upsert_control_result(
 
         existing.resource_type = normalized_resource_type
         existing.severity = severity
-        existing.evidence = {
-            **(existing.evidence or {}),
-            **(evidence or {}),
-        }
         if has_resource_id:
             existing.resource_id = resource_key
 
-        update_finding_state(
+        _apply_scan_result(
             existing,
-            _ScanResult(
-                passed=passed,
-                evaluated_at=observed_at,
-            ),
+            passed=passed,
+            evidence=evidence,
+            observed_at=observed_at,
+            decision_status=decision_status,
         )
-        _stamp_decision_status(existing, passed=passed, decision_status=decision_status)
-        if existing.resolved_by:
-            existing.resolved_by = normalize_resolution_source(existing.resolved_by)
         await db.flush()
         return existing
     except SQLAlchemyError:

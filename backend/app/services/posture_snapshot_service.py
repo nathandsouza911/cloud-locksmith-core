@@ -182,7 +182,8 @@ def build_posture_payload(
 ) -> tuple[int, dict]:
     resolved_active_controls = active_controls or list(MSP_SECURITY_BASELINE)
     risk_data = build_risk_summary(results, active_controls=resolved_active_controls)
-    active_findings = [result for result in results if not bool(result.passed)]
+    # passed=None is NOT_EVALUATED, not a finding.
+    active_findings = [result for result in results if result.passed is False]
     posture = {
         "reason": reason,
         "score": risk_data["score"],

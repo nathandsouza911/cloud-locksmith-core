@@ -176,3 +176,15 @@ def test_build_risk_summary_uses_weighted_group_model():
     assert summary["breakdown"]["external"]["guest_secure"] == 0
     assert summary["top_risks"][0]["control_id"] == "IDENTITY_ADMIN_NO_MFA"
     assert summary["control_breakdown"][0]["score"] == 0.0
+
+
+def test_not_evaluated_rows_are_not_counted_as_findings():
+    """passed=None is NOT_EVALUATED (review 2026-11-19, R1-3), not an active finding."""
+    results = [
+        _result("IDENTITY_USER_NO_MFA", False, "HIGH", resource_id="u1", resource_type="USER"),
+        _result("IDENTITY_USER_CONSENT_POLICY", None, "HIGH", exposure_status="RESOLVED"),
+        _result("IDENTITY_GUEST_INVITES_OPEN", True, "MEDIUM"),
+    ]
+    _, posture = build_posture_payload(results, reason="scan", tenant_id="tenant-1")
+    assert posture["summary"]["active_findings"] == 1
+    assert posture["summary"]["resolved_findings"] == 2
