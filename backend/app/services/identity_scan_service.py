@@ -496,7 +496,7 @@ async def run_user_controls(
 
     overprivileged_user_findings = []
     if OVERPRIVILEGED_USER_CONTROL_ID in baseline_controls or ADMIN_COUNT_EXCESS_CONTROL_ID in baseline_controls:
-        privileged_findings = await detect_overprivileged_controls(db=db, tenant=tenant)
+        privileged_findings = await detect_overprivileged_controls(db=db, tenant=tenant, users=users)
         overprivileged_user_findings = privileged_findings["user_findings"]
 
         if OVERPRIVILEGED_USER_CONTROL_ID in baseline_controls:
@@ -523,7 +523,7 @@ async def run_user_controls(
                     decision_status=("RESOLVED" if finding.get("passed", True) else "PENDING"),
                 )
 
-        if ADMIN_COUNT_EXCESS_CONTROL_ID in baseline_controls:
+        if ADMIN_COUNT_EXCESS_CONTROL_ID in baseline_controls and privileged_findings["tenant_finding"] is not None:
             tenant_finding = privileged_findings["tenant_finding"]
             await _safe_upsert_control_result(
                 db=db,
