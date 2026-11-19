@@ -548,11 +548,13 @@ async def run_user_controls(
             pw_policy_users = await graph_get_all(db, tenant, "/users?$select=id,passwordPolicies")
             pw_policy_map = {u["id"]: u.get("passwordPolicies") for u in pw_policy_users if u.get("id")}
         except Exception:
+            # Unknown is not a pass: an empty map would pass every user and
+            # close real findings, so leave existing results untouched.
             logger.exception("password_never_expires_policy_fetch_failed tenant_id=%s", tenant_id)
-            pw_policy_map = {}
+            pw_policy_map = None
 
         pne_failures = 0
-        for user in standard_users:
+        for user in standard_users if pw_policy_map is not None else []:
             user_id = user.get("id")
             if not user_id:
                 continue
