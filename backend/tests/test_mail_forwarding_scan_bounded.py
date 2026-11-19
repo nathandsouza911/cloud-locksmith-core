@@ -73,3 +73,31 @@ def test_no_mailboxes_means_no_graph_calls(fake_graph):
     assert (rules, unavailable) == ({}, [])
     assert fake_graph == []
     assert scan.get_valid_access_token.await_count == 0
+
+
+def test_failure_log_names_the_graph_status_and_error_code(monkeypatch, caplog):
+    """The cause of a failed mailbox read must be visible in the log (live run 2026-11-19:
+    6 to 7 users failed and only the exception class was logged). Status and Graph error
+    code are logged; the response body, which can hold addresses, is not."""
+    from app.services.graph_client import GraphAPIError
+
+    async def fake_get_with_token(access_token, path, *, expected_tenant_id=None):
+        raise GraphAPIError(
+            method="GET",
+            path=path,
+            status_code=404,
+            response_body='{"error":{"code":"MailboxNotEnabledForRESTAPI","message":"alice@contoso.example"}}',
+            category="not_found",
+        )
+
+    monkeypatch.setattr(scan, "get_valid_access_token", AsyncMock(return_value="token"))
+    monkeypatch.setattr(scan, "graph_get_with_token", fake_get_with_token)
+
+    with caplog.at_level("WARNING"):
+        rules, unavailable = asyncio.run(scan._fetch_inbox_rules(db=None, tenant=TENANT, users=[_user("u1")]))
+
+    assert unavailable == ["u1"]
+    text = caplog.text
+    assert "status=404" in text
+    assert "graph_error_code=MailboxNotEnabledForRESTAPI" in text
+    assert "alice@contoso.example" not in text

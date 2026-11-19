@@ -121,3 +121,65 @@ def test_a_partially_matching_allowlist_still_uses_the_allowlist():
 @pytest.mark.parametrize("control_id", sorted(MATERIAL_EVIDENCE_KEYS))
 def test_every_allowlist_is_non_empty(control_id):
     assert MATERIAL_EVIDENCE_KEYS[control_id], control_id
+
+
+# ── Tenant-level controls: no spurious fallback warning (live run 2026-11-19) ──
+
+
+def _real_default_controls(allow_invites_from="everyone", policies=("ManagePermissionGrantsForSelf.legacy",)):
+    from app.services.detection.identity_risky_defaults_detector import evaluate_identity_default_controls
+
+    snapshot = {
+        "authorization_policy": {
+            "allowInvitesFrom": allow_invites_from,
+            "defaultUserRolePermissions": {"permissionGrantPoliciesAssigned": list(policies)},
+        }
+    }
+    return {item["control_id"]: item["evidence"] for item in evaluate_identity_default_controls(snapshot)}
+
+
+@pytest.mark.parametrize("control_id", ["IDENTITY_USER_CONSENT_POLICY", "IDENTITY_GUEST_INVITES_OPEN"])
+def test_real_tenant_default_evidence_uses_its_allowlist_without_a_warning(control_id, caplog):
+    evidence = _real_default_controls()[control_id]
+    assert set(MATERIAL_EVIDENCE_KEYS[control_id]) & set(evidence), "the declared keys must be the emitted keys"
+    with caplog.at_level("WARNING"):
+        _fp(evidence, control_id=control_id, resource_id="tenant")
+    assert "allowlist_unmatched" not in caplog.text
+
+
+def test_loosening_the_consent_policy_changes_the_fingerprint():
+    control = "IDENTITY_USER_CONSENT_POLICY"
+    strict = _real_default_controls(policies=())[control]
+    loose = _real_default_controls(policies=("ManagePermissionGrantsForSelf.legacy",))[control]
+    assert _fp(strict, control_id=control, resource_id="tenant") != _fp(loose, control_id=control, resource_id="tenant")
+
+
+def test_opening_guest_invites_changes_the_fingerprint():
+    control = "IDENTITY_GUEST_INVITES_OPEN"
+    closed = _real_default_controls(allow_invites_from="adminsOnly")[control]
+    opened = _real_default_controls(allow_invites_from="everyone")[control]
+    assert _fp(closed, control_id=control, resource_id="tenant") != _fp(
+        opened, control_id=control, resource_id="tenant"
+    )
+
+
+def test_app_secret_expiry_has_no_allowlist_that_cannot_match_its_tenant_level_evidence(caplog):
+    """The saved evidence is tenant-level (affected_apps is nested), so the old per-app
+    allowlist matched nothing and only logged a warning. It hashes the whole payload
+    (safe: a new or changed expiring secret changes the fingerprint)."""
+    from app.services.detection.app_secret_expiry_detector import build_app_secret_control_evidence
+
+    def evidence(key_id):
+        finding = {
+            "severity": "HIGH",
+            "evidence": {"app_id": "o1", "expiring_credentials": [{"key_id": key_id}], "already_expired_count": 0},
+        }
+        return build_app_secret_control_evidence([finding], total_app_count=3)
+
+    control = "IDENTITY_APP_SECRET_EXPIRING_SOON"
+    assert control not in MATERIAL_EVIDENCE_KEYS
+    with caplog.at_level("WARNING"):
+        first = _fp(evidence("k1"), control_id=control, resource_id="tenant")
+        second = _fp(evidence("k2"), control_id=control, resource_id="tenant")
+    assert first != second
+    assert "allowlist_unmatched" not in caplog.text

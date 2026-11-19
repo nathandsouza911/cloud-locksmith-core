@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+* The `evidence_fingerprint_allowlist_unmatched` warning is gone for the three controls that
+  logged it. `IDENTITY_USER_CONSENT_POLICY` and `IDENTITY_GUEST_INVITES_OPEN` now declare the
+  keys their detector emits (the fingerprint is unchanged: it already hashed the whole payload
+  through the fallback). `IDENTITY_APP_SECRET_EXPIRING_SOON` no longer declares a per-app list
+  that cannot match its tenant-level evidence; it hashes the whole payload, as before. Tests
+  use the real detector output.
+* The `[y/N]` confirmation was run in a real terminal (a pseudo-terminal in the setup image
+  with a stubbed `az`): Enter and `n` create nothing and sign out, `y` proceeds.
+
+* **`setup --uninstall`** deletes the app registration from the tenant and purges its
+  recycle-bin copies (app and enterprise application). It signs in, checks the tenant against
+  the config, deletes only an app whose client ID is in the config and whose name is "Cloud
+  Locksmith (local)", and asks `[y/N]` first (`--yes` skips it). It leaves the local env files
+  for `docker compose --profile setup down -v`, which needs them. Unit-tested; not yet run
+  against a real tenant.
+* The warning logged when a user's inbox rules cannot be read
+  (`mail_forwarding_rule_fetch_failed`) now includes the Graph status code and error code
+  (never the response body), so the cause of a skipped mailbox is visible in the log.
+* The one Preview usage-report 403 is not a defect in this code: the report call fails
+  soft (the unused-account control then runs without workload activity and says so), and
+  Microsoft returned `S2SUnauthorized` for the reports service itself.
+
 ## 0.2.0 (2026-11-19)
 
 * **One-command setup for a single tenant** (`deploy/`): `docker compose run --rm setup`
@@ -132,7 +156,6 @@
   secret-expiry finding for the instance's own app, executing a fix from the dashboard, and the
   `[y/N]` confirmation (unit-tested only). The rest of the setup, the Preview scan, the full
   connect and the cleanup were run on 2026-11-19.
-* **Setup has no uninstall command.** `deploy/README.md` lists the manual steps.
 
 ## 0.1.2 (2026-11-15)
 

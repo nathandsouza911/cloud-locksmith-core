@@ -22,6 +22,8 @@ from microsoft_oauth_scopes import DELEGATED_SCOPES  # noqa: E402
 
 TENANT = "11111111-2222-4333-8444-555555555555"
 APP_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+APP_OBJECT_ID = "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+SP_OBJECT_ID = "cccccccc-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 CLIENT_SECRET = "Xy7~Q.abc=def-ghi_jkl"
 NEW_SECRET = "Nw8~R.new=sec-ret_000"
 GRAPH_SCOPES = [{"id": f"scope-id-{name}", "value": name} for name in DELEGATED_SCOPES] + [
@@ -33,7 +35,7 @@ SECRET_KEYS = ("MICROSOFT_CLIENT_SECRET", "MICROSOFT_CLIENT_SECRET_KEY_ID", "MIC
 @pytest.fixture(autouse=True)
 def _auto_confirm(monkeypatch):
     """Tests are not interactive: confirm by default. The confirmation tests override this."""
-    monkeypatch.setattr(cl_setup, "_confirm", lambda assume_yes: True)
+    monkeypatch.setattr(cl_setup, "_confirm", lambda assume_yes, **_: True)
 
 
 class FakeAz:
@@ -47,6 +49,8 @@ class FakeAz:
         self.failures = {}
         self.resource_access_file = None
         self.existing_apps = []
+        self.own_app = {"appId": APP_ID, "id": APP_OBJECT_ID, "displayName": "Cloud Locksmith (local)"}
+        self.own_sp = {"appId": APP_ID, "id": SP_OBJECT_ID}
         self.create_result = {"appId": APP_ID, "id": "object-id"}
         self.organization = {
             "value": [
@@ -77,11 +81,20 @@ class FakeAz:
         if cmd[:2] == ("account", "show"):
             return {"tenantId": self.tenant, "user": {"name": "admin@example.com"}}
         if args[0] == "rest":
-            assert args[args.index("--method") + 1] == "get"
-            assert args[args.index("--url") + 1] == "https://graph.microsoft.com/v1.0/organization"
+            method = args[args.index("--method") + 1]
+            url = args[args.index("--url") + 1]
+            if method == "delete":
+                assert url.startswith("https://graph.microsoft.com/v1.0/directory/deletedItems/")
+                return None
+            assert method == "get"
+            assert url == "https://graph.microsoft.com/v1.0/organization"
             return self.organization
         if cmd[:3] == ("ad", "sp", "show"):
+            if args[args.index("--id") + 1] == APP_ID:
+                return self.own_sp
             return GRAPH_SCOPES
+        if cmd[:3] == ("ad", "app", "show"):
+            return self.own_app
         if cmd[:3] == ("ad", "app", "list"):
             name = args[args.index("--display-name") + 1]
             # Like az: a startswith() filter on the display name.
@@ -435,7 +448,7 @@ def test_declined_confirmation_creates_nothing_and_signs_out(tmp_path, capsys, m
 
 def test_yes_flag_is_passed_to_the_confirmation(tmp_path, monkeypatch):
     seen = []
-    monkeypatch.setattr(cl_setup, "_confirm", lambda assume_yes: seen.append(assume_yes) or True)
+    monkeypatch.setattr(cl_setup, "_confirm", lambda assume_yes, **_: seen.append(assume_yes) or True)
     assert cl_setup.main(["--yes"], az=FakeAz(), out_dir=tmp_path) == 0
     assert cl_setup.main([], az=FakeAz(), out_dir=tmp_path / "x") == 1  # missing dir: no confirmation asked
     assert seen == [True]
@@ -768,3 +781,105 @@ def test_help_exits_zero(capsys):
         cl_setup.main(["--help"])
     assert excinfo.value.code == 0
     assert "--rotate-secret" in capsys.readouterr().out
+
+
+def uninstalled(tmp_path, az, *args):
+    write_both(tmp_path, complete_config())
+    before = (config_path(tmp_path).read_bytes(), db_path(tmp_path).read_bytes())
+    code = cl_setup.main(["--uninstall", *args], az=az, out_dir=tmp_path)
+    after = (config_path(tmp_path).read_bytes(), db_path(tmp_path).read_bytes())
+    return code, before, after
+
+
+def test_uninstall_deletes_the_app_and_purges_both_recycle_bin_copies(tmp_path, capsys):
+    az = FakeAz()
+    code, before, after = uninstalled(tmp_path, az)
+    assert code == 0
+    out, err = capsys.readouterr()
+    assert az.called("ad", "app", "delete", "--id", APP_ID)
+    base = "https://graph.microsoft.com/v1.0/directory/deletedItems/"
+    assert az.called("rest", "--method", "delete", "--url", base + APP_OBJECT_ID)
+    assert az.called("rest", "--method", "delete", "--url", base + SP_OBJECT_ID)
+    purge_calls = [i for i, c in enumerate(az.commands()) if "--method delete" in c]
+    assert purge_calls and min(purge_calls) > az.commands().index(f"ad app delete --id {APP_ID}")
+    assert az.called("logout")
+    assert before == after, "the local config is left for `docker compose down -v` to use"
+    assert "down -v" in out
+    assert CLIENT_SECRET not in out + err
+
+
+def test_uninstall_refuses_without_a_config(tmp_path, capsys):
+    az = FakeAz()
+    assert cl_setup.main(["--uninstall"], az=az, out_dir=tmp_path) == 1
+    assert az.calls == []
+    assert "cloud-locksmith.env" in capsys.readouterr().err
+
+
+def test_uninstall_refuses_another_tenant(tmp_path, capsys):
+    az = FakeAz(tenant="99999999-2222-4333-8444-555555555555")
+    code, before, after = uninstalled(tmp_path, az)
+    assert code == 1
+    assert not az.called("ad")
+    assert not az.called("rest", "--method", "delete")
+    assert TENANT in capsys.readouterr().err
+
+
+def test_uninstall_refuses_an_app_that_is_not_ours(tmp_path, capsys):
+    az = FakeAz()
+    az.own_app = {"appId": APP_ID, "id": APP_OBJECT_ID, "displayName": "Payroll"}
+    code, before, after = uninstalled(tmp_path, az)
+    assert code == 1
+    assert not az.called("ad", "app", "delete")
+    assert not az.called("rest", "--method", "delete")
+    assert "Payroll" not in capsys.readouterr().out
+
+
+def test_uninstall_when_the_app_is_already_gone(tmp_path, capsys):
+    az = FakeAz()
+    az.fail("ad", "app", "show", stderr="ERROR: Resource does not exist")
+    code, before, after = uninstalled(tmp_path, az)
+    assert code == 1
+    assert not az.called("ad", "app", "delete")
+    assert "not found" in capsys.readouterr().err.lower()
+    assert az.called("logout")
+
+
+def test_uninstall_declined_deletes_nothing(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cl_setup, "_confirm", lambda assume_yes, **_: False)
+    az = FakeAz()
+    code, before, after = uninstalled(tmp_path, az)
+    assert code == 1
+    assert not az.called("ad", "app", "delete")
+    assert not az.called("rest", "--method", "delete")
+    assert az.called("logout")
+    assert "Nothing was deleted" in capsys.readouterr().err
+
+
+def test_uninstall_passes_yes_to_the_confirmation(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(cl_setup, "_confirm", lambda assume_yes, **_: seen.append(assume_yes) or True)
+    uninstalled(tmp_path, FakeAz(), "--yes")
+    assert seen == [True]
+
+
+def test_uninstall_reports_a_failed_purge_with_manual_steps(tmp_path, capsys):
+    az = FakeAz()
+    az.fail("rest", "--method", "delete", stderr="ERROR: Forbidden")
+    code, before, after = uninstalled(tmp_path, az)
+    assert code == 1
+    assert az.called("ad", "app", "delete", "--id", APP_ID)
+    assert "Deleted applications" in capsys.readouterr().err
+
+
+def test_uninstall_without_a_service_principal_purges_only_the_app(tmp_path):
+    az = FakeAz()
+    az.fail("ad", "sp", "show", stderr="ERROR: Resource does not exist")
+    code, before, after = uninstalled(tmp_path, az)
+    assert code == 0
+    deletes = [c for c in az.commands() if c.startswith("rest --method delete")]
+    assert len(deletes) == 1 and APP_OBJECT_ID in deletes[0]
+
+
+def test_uninstall_does_not_combine_with_rotate_secret(tmp_path):
+    with pytest.raises(SystemExit):
+        cl_setup.main(["--uninstall", "--rotate-secret"], az=FakeAz(), out_dir=tmp_path)
