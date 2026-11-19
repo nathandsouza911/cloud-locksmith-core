@@ -308,3 +308,35 @@ it("resourceFilter excludes matching resources from the reviewable list", async 
   expect(await screen.findByText("alice@contoso.com")).toBeInTheDocument();
   expect(screen.queryByText("bob@contoso.com")).not.toBeInTheDocument();
 });
+
+it("shows an error naming the failed entries when a revoke execution did not apply", async () => {
+  (endpoints.executeWorkflowRemediation as jest.Mock).mockResolvedValue({
+    selected_resource_ids: ["user-1"],
+    executions: [{ status: "failed", reason: "GRAPH_ERROR", control_id: "IDENTITY_USER_NO_MFA" }],
+    review: REVIEW,
+  });
+  render(<WorkflowReviewPage workflowKey="identity-hygiene" />);
+  await userEvent.click(await screen.findByRole("button", { name: "Disable" }));
+  await screen.findByText(/will be remediated/i);
+  await userEvent.type(screen.getByPlaceholderText("CONFIRM"), "CONFIRM");
+  await userEvent.click(screen.getByRole("button", { name: "Remediate" }));
+
+  expect(await screen.findByText(/IDENTITY_USER_NO_MFA/)).toBeInTheDocument();
+  expect(screen.getByText(/failed/i)).toBeInTheDocument();
+});
+
+it("does not list already_compliant/already_resolved executions as failed", async () => {
+  (endpoints.executeWorkflowRemediation as jest.Mock).mockResolvedValue({
+    selected_resource_ids: ["user-1"],
+    executions: [{ status: "already_compliant" }, { status: "already_resolved" }],
+    review: REVIEW,
+  });
+  render(<WorkflowReviewPage workflowKey="identity-hygiene" />);
+  await userEvent.click(await screen.findByRole("button", { name: "Disable" }));
+  await screen.findByText(/will be remediated/i);
+  await userEvent.type(screen.getByPlaceholderText("CONFIRM"), "CONFIRM");
+  await userEvent.click(screen.getByRole("button", { name: "Remediate" }));
+
+  await waitFor(() => expect(endpoints.executeWorkflowRemediation).toHaveBeenCalled());
+  expect(screen.queryByText(/did not apply/i)).not.toBeInTheDocument();
+});
