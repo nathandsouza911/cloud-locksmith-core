@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+* **One-command setup for a single tenant** (`deploy/`): `docker compose run --rm setup`
+  signs in with a device code, creates a single-tenant app registration named "Cloud
+  Locksmith (local)" (one redirect URI, 24-month client secret), and writes
+  `deploy/cloud-locksmith.env` and `deploy/cloud-locksmith-db.env`; then
+  `docker compose up -d` starts the stack on `127.0.0.1` ports 3000 and 8000. It grants no
+  admin consent, assigns no roles, never prints a secret, never replaces an existing
+  config, and `--rotate-secret` replaces the client secret. See `deploy/README.md`.
+* **`LOCAL_LOOPBACK_ONLY`**: production mode without the HTTPS redirect and HSTS, for
+  `http://localhost` installs. Startup is refused if any configured URL is not
+  `http://localhost` or `http://127.0.0.1`.
+* **Configured-tenant sign-in**: when `MICROSOFT_TENANT` is a tenant GUID, sign-in (start,
+  callback and MSP confirm) is limited to that tenant.
+* The app-secret-expiry finding for the instance's own app registration now says how to
+  rotate the secret (`docker compose run --rm setup --rotate-secret`).
 * **Tenant-level Conditional Access checks now use the same rules as CA Coverage, so the
   two can no longer disagree.** The MFA (all users, admins), legacy authentication, device
   code flow, authentication transfer, high-risk sign-in and risk-based MFA checks passed

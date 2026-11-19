@@ -1,7 +1,9 @@
 # Connect a real tenant
 
-This runs Cloud Locksmith Core locally against your own Microsoft 365 tenant. Start with
-a test or developer tenant.
+This is the manual path: you register the Entra app and write the configuration
+yourself. It supports several tenants (an MSP). For one tenant on one machine,
+[`deploy/README.md`](../deploy/README.md) does the app registration and configuration
+with one command. Start with a test or developer tenant.
 
 **What has been verified.** On 2026-11-13 this codebase (with the fixes listed under
 *Unreleased* in `CHANGELOG.md`) was run against a licensed developer tenant with the

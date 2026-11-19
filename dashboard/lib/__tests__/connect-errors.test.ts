@@ -23,6 +23,12 @@ describe("signInErrorMessage", () => {
     expect(message).toMatch(/already connected by another account/i);
   });
 
+  it("explains a sign-in from a tenant other than the configured one", () => {
+    expect(signInErrorMessage("tenant_not_allowed")).toBe(
+      "This Cloud Locksmith install only accepts sign-ins from its own Microsoft tenant.",
+    );
+  });
+
   it("uses fixed text for unknown codes, never text from the URL", () => {
     expect(signInErrorMessage("connection_failed")).toBe("Sign-in could not be completed. Please try again.");
   });

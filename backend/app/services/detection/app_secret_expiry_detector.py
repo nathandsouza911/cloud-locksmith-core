@@ -23,8 +23,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from app.config import settings
+
 
 _DEFAULT_EXPIRY_THRESHOLD_DAYS = 90
+
+_OWN_SECRET_REMEDIATION_HINT = (
+    "This is Cloud Locksmith's own app registration. In deploy/, run: docker compose run --rm setup --rotate-secret"
+)
 
 _TIER_CRITICAL_DAYS = 0  # already expired
 _TIER_HIGH_DAYS = 7
@@ -86,6 +92,19 @@ def _check_credential(cred: dict, now: datetime, threshold: timedelta) -> dict |
     }
 
 
+def _is_this_instance(client_id: str | None) -> bool:
+    """True when this app registration is the one this install signs in with.
+
+    Only claimed for the single-tenant deploy/ install (MICROSOFT_TENANT is a
+    tenant GUID): the rotate hint names a deploy/ command, which a manual or
+    multi-tenant install does not have.
+    """
+    if not settings.single_tenant_id:
+        return False
+    own_client_id = (settings.MICROSOFT_CLIENT_ID or "").strip().lower()
+    return bool(own_client_id) and (client_id or "").strip().lower() == own_client_id
+
+
 def evaluate_app_secret_expiry(
     app: dict,
     *,
@@ -126,23 +145,25 @@ def evaluate_app_secret_expiry(
     for c in expiring:
         severity_counts[c["severity"]] += 1
 
-    return {
-        "passed": False,
-        "severity": worst_severity,
-        "resource_id": app_id,
-        "evidence": {
-            "app_id": app_id,
-            "app_display_name": app_display_name,
-            "client_id": client_id,
-            "expiring_credentials": expiring,
-            "expiring_count": len(expiring),
-            "already_expired_count": already_expired_count,
-            "min_days_remaining": min_days,
-            "worst_severity": worst_severity,
-            "severity_counts": severity_counts,
-            "threshold_days": threshold_days,
-        },
+    is_this_instance = _is_this_instance(client_id)
+
+    evidence = {
+        "app_id": app_id,
+        "app_display_name": app_display_name,
+        "client_id": client_id,
+        "expiring_credentials": expiring,
+        "expiring_count": len(expiring),
+        "already_expired_count": already_expired_count,
+        "min_days_remaining": min_days,
+        "worst_severity": worst_severity,
+        "severity_counts": severity_counts,
+        "threshold_days": threshold_days,
+        "is_this_instance": is_this_instance,
     }
+    if is_this_instance:
+        evidence["remediation_hint"] = _OWN_SECRET_REMEDIATION_HINT
+
+    return {"passed": False, "severity": worst_severity, "resource_id": app_id, "evidence": evidence}
 
 
 def evaluate_all_app_secret_expiry(
@@ -159,6 +180,29 @@ def evaluate_all_app_secret_expiry(
         if result is not None:
             findings.append(result)
     return findings
+
+
+def build_app_secret_control_evidence(findings: list[dict], *, total_app_count: int) -> dict:
+    """The tenant-level evidence the scanner saves for this control.
+
+    Per-app detail stays under ``affected_apps``. When one of the apps is this
+    install's own registration, the rotate hint is also lifted to top-level
+    scalars: the review detail panel shows only top-level scalar facts, so a
+    hint left nested would never reach the technician.
+    """
+    affected_apps = [f["evidence"] for f in findings]
+    overall_severity = aggregate_app_secret_severity(findings)
+    evidence = {
+        "affected_app_count": len(affected_apps),
+        "total_app_count": total_app_count,
+        "expired_app_count": sum(1 for app in affected_apps if app.get("already_expired_count", 0) > 0),
+        "worst_severity": overall_severity,
+        "affected_apps": affected_apps,
+    }
+    if any(app.get("is_this_instance") for app in affected_apps):
+        evidence["includes_this_instance"] = True
+        evidence["remediation_hint"] = _OWN_SECRET_REMEDIATION_HINT
+    return evidence
 
 
 def aggregate_app_secret_severity(findings: list[dict]) -> str:

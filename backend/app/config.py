@@ -1,11 +1,21 @@
 import json
 import logging
+import re
+from urllib.parse import urlsplit
 
 from pydantic import AnyUrl, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 logger = logging.getLogger(__name__)
+
+
+_TENANT_GUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+def _is_loopback_http_url(url: str) -> bool:
+    parts = urlsplit(url)
+    return parts.scheme == "http" and parts.hostname in {"localhost", "127.0.0.1"}
 
 
 class Settings(BaseSettings):
@@ -45,6 +55,9 @@ class Settings(BaseSettings):
     APP_JWT_TTL_HOURS: int = 24
     APP_AUTH_COOKIE_NAME: str = "clx_access_token"
     APP_AUTH_COOKIE_SECURE: bool | None = None
+    # Run production mode on this machine only, over plain http://localhost. Disables the
+    # HTTPS redirect and HSTS (nothing else); every configured URL must then be loopback.
+    LOCAL_LOOPBACK_ONLY: bool = False
 
     # Redis — prefer REDIS_URL (Railway); fall back to REDIS_HOST + REDIS_PORT
     REDIS_URL: str | None = None
@@ -84,6 +97,21 @@ class Settings(BaseSettings):
             # Force eager evaluation in production — catches missing/invalid
             # REPORT_SIGNING_SECRET at startup, not at first use.
             _ = self.report_signing_secret
+        if self.LOCAL_LOOPBACK_ONLY:
+            urls = {
+                "BACKEND_PUBLIC_URL": str(self.BACKEND_PUBLIC_URL),
+                "FRONTEND_URL": str(self.FRONTEND_URL),
+                "MICROSOFT_REDIRECT_URI": str(self.MICROSOFT_REDIRECT_URI),
+            }
+            for index, origin in enumerate(self.cors_allowed_origins):
+                urls[f"CORS_ALLOWED_ORIGINS[{index}]"] = origin
+            for name, url in urls.items():
+                if not _is_loopback_http_url(url):
+                    raise ValueError(
+                        f"LOCAL_LOOPBACK_ONLY requires {name} to be http://localhost or "
+                        "http://127.0.0.1 (any port); refusing to disable HTTPS enforcement "
+                        "for a non-loopback address"
+                    )
         return self
 
     model_config = SettingsConfigDict(
@@ -116,6 +144,10 @@ class Settings(BaseSettings):
         if self.APP_AUTH_COOKIE_SECURE is not None:
             return self.APP_AUTH_COOKIE_SECURE
         return self.ENVIRONMENT.lower() == "production"
+
+    @property
+    def enforce_https(self) -> bool:
+        return self.ENVIRONMENT.lower() == "production" and not self.LOCAL_LOOPBACK_ONLY
 
     @property
     def trusted_proxy_hosts(self) -> list[str]:
@@ -174,6 +206,16 @@ class Settings(BaseSettings):
                 ]
             )
         return defaults
+
+    @property
+    def single_tenant_id(self) -> str | None:
+        """The one Entra tenant sign-in is fixed to, or None for multi-tenant mode.
+
+        Only a tenant GUID counts; `common`, `organizations`, `consumers`, a
+        domain name or an empty value leave sign-in multi-tenant.
+        """
+        tenant = self.MICROSOFT_TENANT.strip().lower()
+        return tenant if _TENANT_GUID_PATTERN.fullmatch(tenant) else None
 
     @property
     def microsoft_login_base_url(self) -> str:

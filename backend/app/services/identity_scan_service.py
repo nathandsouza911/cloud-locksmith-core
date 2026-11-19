@@ -48,6 +48,7 @@ from app.services.detection.permanent_role_assignment_detector import (
     PRIVILEGED_ROLE_DEFINITION_IDS as _PERMANENT_ROLE_TARGET_IDS,
 )
 from app.services.detection.app_secret_expiry_detector import aggregate_app_secret_severity
+from app.services.detection.app_secret_expiry_detector import build_app_secret_control_evidence
 from app.services.detection.mail_forwarding_rule_detector import evaluate_user_forwarding_rules
 from app.services.graph_security_defaults_service import fetch_security_defaults_enabled
 from app.services.graph_user_service import fetch_users
@@ -716,21 +717,12 @@ async def run_tenant_controls(
                 "/applications?$select=id,displayName,appId,passwordCredentials,keyCredentials",
             )
             app_findings = evaluate_all_app_secret_expiry(apps)
-            affected_apps = [f["evidence"] for f in app_findings]
-            overall_severity = aggregate_app_secret_severity(app_findings)
-            expired_count = sum(1 for f in app_findings if f["evidence"].get("already_expired_count", 0) > 0)
             control_results.append(
                 {
                     "control_id": "IDENTITY_APP_SECRET_EXPIRING_SOON",
-                    "severity": overall_severity,
-                    "passed": len(affected_apps) == 0,
-                    "evidence": {
-                        "affected_app_count": len(affected_apps),
-                        "total_app_count": len(apps),
-                        "expired_app_count": expired_count,
-                        "worst_severity": overall_severity,
-                        "affected_apps": affected_apps,
-                    },
+                    "severity": aggregate_app_secret_severity(app_findings),
+                    "passed": len(app_findings) == 0,
+                    "evidence": build_app_secret_control_evidence(app_findings, total_app_count=len(apps)),
                 }
             )
         except Exception:

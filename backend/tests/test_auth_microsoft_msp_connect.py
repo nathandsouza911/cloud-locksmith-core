@@ -107,7 +107,7 @@ def _app_token_for(platform_user: PlatformUser) -> str:
     )
 
 
-def _stub_oauth(monkeypatch, *, oauth_user_oid: str, is_admin: bool):
+def _stub_oauth(monkeypatch, *, oauth_user_oid: str, is_admin: bool, tenant_id: str = "tenant-123"):
     monkeypatch.setattr(auth_microsoft.httpx, "AsyncClient", _FakeAsyncClient)
     monkeypatch.setattr(
         auth_microsoft,
@@ -120,14 +120,14 @@ def _stub_oauth(monkeypatch, *, oauth_user_oid: str, is_admin: bool):
             "scope": "Policy.ReadWrite.Authorization",
             "scopes": ["Policy.ReadWrite.Authorization"],
             "token_type": "Bearer",
-            "tenant_id": "tenant-123",
-            "claims": {"tid": "tenant-123"},
+            "tenant_id": tenant_id,
+            "claims": {"tid": tenant_id},
         },
     )
 
     async def fake_verify_microsoft_id_token(id_token, expected_tid):
         return {
-            "tid": "tenant-123",
+            "tid": tenant_id,
             "oid": oauth_user_oid,
             "email": "msp-admin@example.com",
         }
@@ -140,7 +140,7 @@ def _stub_oauth(monkeypatch, *, oauth_user_oid: str, is_admin: bool):
     monkeypatch.setattr(
         auth_microsoft,
         "decode_access_token_claims",
-        lambda access_token: {"tid": "tenant-123", "oid": oauth_user_oid},
+        lambda access_token: {"tid": tenant_id, "oid": oauth_user_oid},
     )
     monkeypatch.setattr(auth_microsoft, "encrypt_token_dict", lambda token_payload: dict(token_payload))
     monkeypatch.setattr(auth_microsoft, "decrypt_token_dict", lambda token_payload: dict(token_payload))
@@ -151,7 +151,7 @@ def _stub_oauth(monkeypatch, *, oauth_user_oid: str, is_admin: bool):
             return {
                 "value": [
                     {
-                        "id": "tenant-123",
+                        "id": tenant_id,
                         "displayName": "Claimable Tenant",
                         "verifiedDomains": [{"name": "tenant.example.com", "isDefault": True}],
                     }

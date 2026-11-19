@@ -1,7 +1,8 @@
 # Microsoft Graph permissions
 
 Cloud Locksmith Core signs in with delegated OAuth (authorization code flow) against
-your own multi-tenant Entra app registration. The scope set depends on how the user
+your own Entra app registration (multi-tenant on the manual path, single-tenant with the
+one-command install). The scope set depends on how the user
 signs in. All lists below are copied from the code; if they disagree, the code wins:
 `backend/app/services/microsoft_oauth_scopes.py` and `backend/app/api/routes/auth_microsoft.py`.
 
@@ -51,6 +52,10 @@ is the tenant being changed. You do not need to grant any application permission
 
 ## Least privilege notes
 
+* The one-command install (`deploy/README.md`) registers a single-tenant app and declares
+  the delegated scopes on it. It grants no admin consent and assigns no roles: consent
+  happens on the sign-in screen, as above. It sets `MICROSOFT_TENANT` to the tenant ID,
+  which limits sign-in (start, callback and MSP confirm) to that tenant.
 * Admin consent is required for most of these scopes. Use a Global Administrator for the
   first connect; the tenant is then bound to that user's `oid` as owner (see
   `connect-a-real-tenant.md`).
