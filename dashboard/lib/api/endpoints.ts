@@ -683,10 +683,11 @@ export const executeWorkflowRemediation = (
     reason?: string;
   },
 ) =>
-  api.post<{ selected_resource_ids: string[]; review: WorkflowReviewResponse }>(
-    `/api/v1/workflows/${encodeURIComponent(workflowKey)}/review/remediate`,
-    payload,
-  );
+  api.post<{
+    selected_resource_ids: string[];
+    executions?: ExecuteRemediationResponse[];
+    review: WorkflowReviewResponse;
+  }>(`/api/v1/workflows/${encodeURIComponent(workflowKey)}/review/remediate`, payload);
 
 export const completeWorkflowReview = (workflowKey: string) =>
   api.post<WorkflowReviewResponse>(`/api/v1/workflows/${encodeURIComponent(workflowKey)}/review/complete`);

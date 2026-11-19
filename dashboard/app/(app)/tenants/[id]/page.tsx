@@ -31,6 +31,7 @@ import { useExecutiveSummary, usePostureTrend, useComplianceResults } from "@/li
 import { useAuth } from "@/lib/auth-context";
 import type { Severity, DecisionStatus } from "@/types";
 import * as ep from "@/lib/api/endpoints";
+import { executionSucceeded, normalizeExecuteFailureMessage } from "@/lib/remediation-result";
 import { scoreBandAccent } from "@/utils/posture";
 
 const SEVERITY_ORDER: Severity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
@@ -43,6 +44,7 @@ export default function TenantDetailPage({ params }: { params: { id: string } })
   const [severityFilter, setSeverityFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [scanLoading, setScanLoading] = useState(false);
+  const [executeError, setExecuteError] = useState<string | null>(null);
   const hasAccess = tenants.some((tenant) => tenant.tenant_id === tenantId);
 
   useEffect(() => {
@@ -265,6 +267,7 @@ export default function TenantDetailPage({ params }: { params: { id: string } })
                 />
               </div>
             </div>
+            {executeError && <ErrorState message={executeError} />}
             {complianceQuery.loading ? (
               <div className="p-5">
                 <TableSkeleton rows={6} cols={5} />
@@ -340,8 +343,25 @@ export default function TenantDetailPage({ params }: { params: { id: string } })
                                   onClick={() =>
                                     ep
                                       .executeRemediation(String(r.id), tenantId)
-                                      .then(() => complianceQuery.refetch())
-                                      .catch(() => {})
+                                      .then((response) => {
+                                        if (!executionSucceeded(response)) {
+                                          setExecuteError(
+                                            normalizeExecuteFailureMessage(
+                                              response.status,
+                                              response.reason,
+                                              response.message,
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        setExecuteError(null);
+                                        complianceQuery.refetch();
+                                      })
+                                      .catch((err) =>
+                                        setExecuteError(
+                                          err instanceof Error ? err.message : "Execution failed",
+                                        ),
+                                      )
                                   }
                                 >
                                   <Play size={11} /> Execute

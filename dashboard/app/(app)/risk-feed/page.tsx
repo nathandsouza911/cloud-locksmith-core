@@ -19,6 +19,7 @@ import {
   TableSkeleton,
 } from "@/components/ui";
 import * as ep from "@/lib/api/endpoints";
+import { executionSucceeded, normalizeExecuteFailureMessage } from "@/lib/remediation-result";
 import { ApiError } from "@/lib/api/client";
 import {
   useAttackPaths,
@@ -136,14 +137,6 @@ function mapRoleOptions(roleSource: Array<unknown>): RoleOption[] {
       return { value, label };
     })
     .filter((role): role is RoleOption => Boolean(role));
-}
-
-function normalizeExecuteFailureMessage(status?: string, reason?: string, message?: string): string {
-  if (reason === "NO_ROLES_SELECTED") return "Execution failed: no roles selected";
-  if (message) return message;
-  if (reason) return `Execution failed: ${reason}`;
-  if (status) return `Execution failed: ${status}`;
-  return "Execution failed";
 }
 
 function relTime(iso: string) {
@@ -590,12 +583,7 @@ export default function RiskFeedPage() {
       ) {
         setBreakGlassCredentials(response.created_accounts);
       }
-      const executionSucceeded =
-        response.status?.toLowerCase() === "success" ||
-        response.status?.toLowerCase() === "executed" ||
-        ("remediation_status" in response && response.remediation_status === "SUCCESS");
-
-      if (!executionSucceeded) {
+      if (!executionSucceeded(response)) {
         setToast(normalizeExecuteFailureMessage(response.status, response.reason, response.message));
         return;
       }

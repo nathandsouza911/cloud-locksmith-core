@@ -98,3 +98,12 @@ it("never calls the direct control-apply endpoint", async () => {
   await waitFor(() => expect(mocked.executeRemediation).toHaveBeenCalled());
   expect(mocked.applyControl).not.toHaveBeenCalled();
 });
+
+it("shows a failure, not 'Applied and Verified', when execute resolves with status failed", async () => {
+  mocked.executeRemediation.mockResolvedValue({ status: "failed", reason: "GRAPH_ERROR" });
+  await reviewAndFixLegacyAuth();
+
+  await waitFor(() => expect(mocked.executeRemediation).toHaveBeenCalled());
+  expect(await screen.findByText("Execution failed: GRAPH_ERROR")).toBeInTheDocument();
+  expect(screen.queryByText("Applied and Verified")).not.toBeInTheDocument();
+});

@@ -19,6 +19,7 @@ import { Button, Card, ErrorState, PageHeader, TableSkeleton } from "@/component
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { RunProgress } from "@/components/workflow/RunProgress";
 import { ResourceList } from "@/components/workflow/ResourceList";
+import { executionSucceeded, normalizeExecuteFailureMessage } from "@/lib/remediation-result";
 import { useWorkflowReview } from "@/lib/api/hooks";
 import {
   completeWorkflowReview,
@@ -107,12 +108,24 @@ export function WorkflowReviewPage({ workflowKey, renderResourceDetail, resource
     setBusy(true);
     setActionError(null);
     try {
-      await executeWorkflowRemediation(workflowKey, {
+      const response = await executeWorkflowRemediation(workflowKey, {
         control_id: resource.control_id,
         resource_ids: [resource.resource_id],
         confirmed: true,
       });
       setPending(null);
+      // The backend answers 200 even when an execution did not apply.
+      const failed = (response.executions ?? []).filter((execution) => !executionSucceeded(execution));
+      if (failed.length > 0) {
+        setActionError(
+          `Remediation did not apply for: ${failed
+            .map(
+              (f) =>
+                `${f.control_id ?? resource.control_id} (${normalizeExecuteFailureMessage(f.status, f.reason, f.message)})`,
+            )
+            .join(", ")}`,
+        );
+      }
       await refetch();
     } catch (err) {
       setPending(null);
