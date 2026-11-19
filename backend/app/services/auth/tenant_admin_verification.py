@@ -1,9 +1,8 @@
 """Shared tenant-admin role verification for first-owner tenant claims.
 
 A tenant may only be *claimed* (granted OWNER) by a user who holds an approved
-tenant-admin directory role. This is the single source of truth reused by:
+tenant-admin directory role. This is the single source of truth, used by:
 
-  * MSP connect       (app/api/routes/auth_microsoft.py)
   * SMB onboarding    (app/api/routes/auth_microsoft.py)
 
 Identity is matched on the immutable Entra object ID (oid) of the role member,

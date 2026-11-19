@@ -14,8 +14,8 @@ Regressions this covers:
    HTTPException with no custom exception handler registered anywhere in
    app/main.py, so the browser rendered backend JSON directly.
 
-Both now redirect to the frontend (/tenants, where "Add Tenant" already
-lives) carrying a `connect_error` code the user can act on, instead of
+Both now redirect to the frontend (/settings, where "Re-authorize Microsoft
+OAuth" lives) carrying a `connect_error` code the user can act on, instead of
 dead-ending outside the product.
 """
 
@@ -57,7 +57,7 @@ def test_user_cancelling_consent_redirects_to_frontend_not_a_422():
 
     assert response.status_code == 302
     location = response.headers["location"]
-    assert location.startswith(f"{settings.FRONTEND_URL}/tenants")
+    assert location.startswith(f"{settings.FRONTEND_URL}/settings")
     query = parse_qs(urlparse(location).query)
     assert query["connect_error"] == ["cancelled"]
 
@@ -104,7 +104,7 @@ def test_invalid_or_expired_state_redirects_to_frontend_not_raw_json():
 
     assert response.status_code == 302
     location = response.headers["location"]
-    assert location.startswith(f"{settings.FRONTEND_URL}/tenants")
+    assert location.startswith(f"{settings.FRONTEND_URL}/settings")
     query = parse_qs(urlparse(location).query)
     assert query["connect_error"] == ["connection_failed"]
 

@@ -1,9 +1,8 @@
 """M1 — shared tenant-admin role verification.
 
-The MSP-connect flow already verifies that the OAuth-completing user holds a
-Global Administrator or Privileged Role Administrator directory role before a
-tenant can be claimed. SMB onboarding and AppSource onboarding must reuse the
-SAME logic before granting OWNER. These tests pin the shared primitive.
+A tenant can be claimed only by an OAuth-completing user who holds a Global
+Administrator or Privileged Role Administrator directory role. SMB onboarding
+and AppSource onboarding use the SAME logic before granting OWNER. These tests pin the shared primitive.
 """
 
 import asyncio

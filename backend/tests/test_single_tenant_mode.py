@@ -5,27 +5,23 @@ source of truth, so both are checked against the configured tenant.
 """
 
 import asyncio
+import uuid
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi import HTTPException
 
 import app.db.models  # noqa: F401 — registers all models with Base.metadata
-import app.db.models.remediation_campaign  # noqa: F401 — FK target of campaign_scheduled_jobs
 from app.api.routes import auth_microsoft
 from app.config import Settings, settings
 from app.db.models.oauth_state_nonce import OAuthStateNonce
+from app.db.models.organization import Organization
 from app.db.models.pending_oauth_session import PendingOAuthSession
+from app.db.models.platform_user import PlatformUser
 from app.db.models.tenant import Tenant
 from app.db.models.tenant_oauth import TenantOAuth
-from tests.test_auth_microsoft_msp_connect import (
-    _app_token_for,
-    _make_request,
-    _make_session,
-    _seed_msp_user,
-    _start_msp_connect,
-    _stub_oauth,
-)
+from app.db.models.user_tenant_access import TenantAccessType, UserTenantAccess, UserTenantRole
+from tests.oauth_callback_helpers import _make_request, _make_session, _stub_oauth
 
 CONFIGURED_TENANT = "3f2b8c1e-5d4a-4e6b-9a7c-0d1e2f3a4b5c"
 OTHER_TENANT = "9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d"
@@ -158,28 +154,42 @@ def test_callback_route_redirects_foreign_tenant_with_connect_error(monkeypatch,
     session.close()
 
 
-def test_msp_connect_reauthorise_own_tenant_still_works(monkeypatch, single_tenant):
-    # The Settings page "Re-authorize Microsoft OAuth" button starts msp_connect
-    # with no tenant hint, including for SMB accounts.
+def test_owner_reauthorises_own_tenant_via_smb_onboarding(monkeypatch, single_tenant):
+    # Settings "Re-authorize Microsoft OAuth" and the reconnect button start
+    # smb_onboarding (msp_connect is gone). The returning owner, matched by oid,
+    # gets a fresh token on the same account; no second user or org is made.
     session = _make_session()
-    platform_user, _msp_org, smb_org = _seed_msp_user(session)
+    org = Organization(id=uuid.uuid4(), name="Own Org")
+    owner = PlatformUser(
+        id=uuid.uuid4(), email="admin@example.com", oid="oauth-user-1", role="ADMIN", organization_id=org.id
+    )
+    session.add_all([org, owner])
+    session.commit()
     session.add(
         Tenant(
             id=single_tenant,
             tenant_name="Own Tenant",
             domain="tenant.example.com",
             provider="microsoft",
-            organization_id=smb_org.id,
+            organization_id=org.id,
         )
     )
     session.commit()
-    token = _app_token_for(platform_user)
-    state = _start_msp_connect(session, platform_user, token, tenant_id=None)
+    session.add(
+        UserTenantAccess(
+            user_id=owner.id,
+            tenant_id=single_tenant,
+            role=UserTenantRole.OWNER,
+            access_type=TenantAccessType.SMB_OWNER,
+        )
+    )
+    session.commit()
+    state = _state_of(_start(session, tenant_id=single_tenant))
     _stub_oauth(monkeypatch, oauth_user_oid="oauth-user-1", is_admin=True, tenant_id=single_tenant)
 
     response = asyncio.run(
         auth_microsoft.microsoft_oauth_callback(
-            request=_make_request(token, path="/api/v1/auth/microsoft/callback"),
+            request=_make_request(path="/api/v1/auth/microsoft/callback"),
             code="code",
             state=state,
             error=None,
@@ -188,9 +198,10 @@ def test_msp_connect_reauthorise_own_tenant_still_works(monkeypatch, single_tena
         )
     )
 
-    assert "/msp/confirm-tenant" in response.headers["location"]
-    pending = session.query(PendingOAuthSession).filter_by(state=state).one()
-    assert pending.resolved_tenant_id == single_tenant
+    assert "connect_error" not in response.headers["location"]
+    assert session.query(TenantOAuth).filter_by(tenant_id=single_tenant).count() == 1
+    assert session.query(PlatformUser).count() == 1
+    assert session.query(Organization).count() == 1
     session.close()
 
 
@@ -206,45 +217,6 @@ def test_multi_tenant_config_unchanged(monkeypatch):
     assert auth_microsoft._build_microsoft_token_url(None) == (
         "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
     )
-    session.close()
-
-
-def test_confirm_msp_connect_refuses_pending_session_for_other_tenant(monkeypatch):
-    # A pending msp_connect session staged for another tenant before single-tenant
-    # mode was switched on must not be attachable afterwards.
-    session = _make_session()
-    platform_user, _msp_org, _smb_org = _seed_msp_user(session)
-    token = _app_token_for(platform_user)
-    state = _start_msp_connect(session, platform_user, token, tenant_id=OTHER_TENANT)
-    _stub_oauth(monkeypatch, oauth_user_oid="oauth-user-1", is_admin=True, tenant_id=OTHER_TENANT)
-    asyncio.run(
-        auth_microsoft.microsoft_oauth_callback(
-            request=_make_request(token, path="/api/v1/auth/microsoft/callback"),
-            code="code",
-            state=state,
-            error=None,
-            error_description=None,
-            db=session,
-        )
-    )
-    pending = session.query(PendingOAuthSession).filter_by(state=state).one()
-    assert pending.resolved_tenant_id == OTHER_TENANT
-
-    monkeypatch.setattr(settings, "MICROSOFT_TENANT", CONFIGURED_TENANT)
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(
-            auth_microsoft.confirm_msp_connect(
-                payload=auth_microsoft.MspConnectConfirmRequest(session_id=str(pending.id)),
-                request=_make_request(token, path="/api/v1/auth/microsoft/msp-connect/confirm"),
-                db=session,
-            )
-        )
-
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail["code"] == "TENANT_NOT_ALLOWED"
-    assert session.query(Tenant).count() == 0
-    assert session.query(TenantOAuth).count() == 0
-    assert session.get(PendingOAuthSession, pending.id).confirmed_at is None
     session.close()
 
 

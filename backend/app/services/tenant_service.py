@@ -74,7 +74,7 @@ def mark_scan_complete(db: Session, tenant_id: str):
     db.commit()
 
 
-from app.db.models.organization import Organization, OrganizationMode
+from app.db.models.organization import Organization
 
 
 def get_organization_for_tenant(
@@ -83,11 +83,6 @@ def get_organization_for_tenant(
 ) -> Organization:
     tenant = db.query(Tenant).filter_by(id=tenant_id).one()
     return tenant.organization
-
-
-def is_managed_org(db: Session, tenant_id: str) -> bool:
-    org = get_organization_for_tenant(db, tenant_id)
-    return org.mode == OrganizationMode.MANAGED
 
 
 def get_tenants_for_organization(

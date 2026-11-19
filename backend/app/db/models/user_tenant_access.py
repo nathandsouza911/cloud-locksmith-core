@@ -16,8 +16,10 @@ class UserTenantRole(str, enum.Enum):
 
 
 class TenantAccessType(str, enum.Enum):
+    # The Postgres type still lists MSP_MANAGER (removing an enum value needs a type
+    # rebuild); migration 20261120_drop_campaigns deleted every MSP_MANAGER row and
+    # nothing writes it any more.
     SMB_OWNER = "SMB_OWNER"
-    MSP_MANAGER = "MSP_MANAGER"
 
 
 class UserTenantAccess(Base):

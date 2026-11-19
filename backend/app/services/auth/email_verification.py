@@ -1,5 +1,5 @@
 """
-Email verification tokens for password-signup flow (SMB/MSP signup).
+Email verification tokens for password-signup flow.
 
 Tokens are short-lived JWTs scoped to a single purpose ("email_verify").
 They cannot be confused with session tokens because the decoder enforces

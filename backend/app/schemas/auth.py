@@ -69,7 +69,6 @@ class PasswordSignupRequest(BaseModel):
     email: EmailStr
     password: str
     name: str
-    is_msp: bool = False
 
     @field_validator("email")
     @classmethod
