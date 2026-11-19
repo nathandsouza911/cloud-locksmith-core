@@ -24,16 +24,20 @@ CONTROL_LICENSE_REQUIREMENTS = {
     "CA_RISK_BASED_STEP_UP_MFA": "P2",
 }
 
+# The one reading of /subscribedSkus for Entra ID P1/P2, used by the CA
+# licence gate (license_check_service) and every tenant-licence check.
+# Service plans are authoritative; part numbers cover payloads without them.
+# Office 365 E5 (ENTERPRISEPREMIUM) does not include Entra ID P1.
 P1_MARKERS = {
     "AAD_PREMIUM",
     "EMS",
-    "ENTERPRISEPREMIUM",
     "SPE_E3",
     "SPB",
+    "M365_BUSINESS_PREMIUM",
 }
 P2_MARKERS = {
     "AAD_PREMIUM_P2",
-    "EMS_PREMIUM",
+    "EMSPREMIUM",
     "SPE_E5",
 }
 P1_SERVICE_PLANS = {
@@ -42,19 +46,36 @@ P1_SERVICE_PLANS = {
 P2_SERVICE_PLANS = {
     "AAD_PREMIUM_P2",
 }
+# capabilityStatus values of a usable subscription (Suspended, LockedOut and
+# Deleted are not).
+_ACTIVE_CAPABILITY_STATUSES = {"ENABLED", "WARNING"}
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _sku_is_active(sku: dict) -> bool:
+    status = sku.get("capabilityStatus")
+    if isinstance(status, str) and status:
+        return status.upper() in _ACTIVE_CAPABILITY_STATUSES
+    if "prepaidUnits" not in sku and "consumedUnits" not in sku:
+        return True  # no status information: never hide a licence on that alone
+    enabled = int((sku.get("prepaidUnits") or {}).get("enabled") or 0)
+    return enabled > 0 or int(sku.get("consumedUnits") or 0) > 0
+
+
 def _normalize_license_payload(payload: dict | None) -> dict[str, bool]:
     values = payload.get("value", []) if isinstance(payload, dict) else []
+    return entra_premium_from_skus(values)
+
+
+def entra_premium_from_skus(skus: list[dict]) -> dict[str, bool]:
     markers = set()
     service_plans = set()
 
-    for sku in values:
-        if not isinstance(sku, dict):
+    for sku in skus:
+        if not isinstance(sku, dict) or not _sku_is_active(sku):
             continue
         sku_part_number = sku.get("skuPartNumber")
         if isinstance(sku_part_number, str) and sku_part_number:

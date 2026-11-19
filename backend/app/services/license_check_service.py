@@ -4,21 +4,9 @@ import logging
 
 from app.services.graph_client import GraphAPIError
 from app.services.ca_policy_states import CA_STATE_REPORT_ONLY
+from app.services.license_service import entra_premium_from_skus
 
 logger = logging.getLogger(__name__)
-
-CA_LICENSED_SKU_PART_NUMBERS: frozenset[str] = frozenset(
-    {
-        "AAD_PREMIUM",  # Entra ID P1 standalone
-        "AAD_PREMIUM_P2",  # Entra ID P2 standalone
-        "EMSPREMIUM",  # Enterprise Mobility + Security E5
-        "EMS",  # Enterprise Mobility + Security E3 (includes Entra P1)
-        "SPE_E3",  # Microsoft 365 E3 (includes Entra P1)
-        "SPE_E5",  # Microsoft 365 E5 (includes Entra P2)
-        "SPB",  # Microsoft 365 Business Premium (includes Entra P1)
-        "M365_BUSINESS_PREMIUM",  # Alternate part number for Business Premium
-    }
-)
 
 
 async def check_conditional_access_license(graph_client) -> bool:
@@ -80,22 +68,9 @@ async def check_ca_license_from_skus(graph_client) -> bool:
     """
     try:
         payload = await graph_client.get("/subscribedSkus")
-        skus = list((payload or {}).get("value", []))
-        for sku in skus:
-            part_number = str(sku.get("skuPartNumber") or "").strip().upper()
-            if part_number not in CA_LICENSED_SKU_PART_NUMBERS:
-                continue
-            enabled = int((sku.get("prepaidUnits") or {}).get("enabled") or 0)
-            consumed = int(sku.get("consumedUnits") or 0)
-            if enabled > 0 or consumed > 0:
-                logger.debug(
-                    "[CALicense] CA-capable SKU found: %s (enabled=%d consumed=%d)",
-                    part_number,
-                    enabled,
-                    consumed,
-                )
-                return True
-        logger.info("[CALicense] No CA-capable SKU found in subscribedSkus")
+        if entra_premium_from_skus(list((payload or {}).get("value", [])))["has_p1"]:
+            return True
+        logger.info("[CALicense] No active Entra ID P1/P2 licence in subscribedSkus")
         return False
     except Exception:
         logger.exception("[CALicense] SKU-based license check failed — defaulting to True")
