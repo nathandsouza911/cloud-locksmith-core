@@ -55,6 +55,8 @@ CA_ENGINE_CONTROLS = frozenset(
         "CA_AUTHENTICATION_TRANSFER_BLOCK",
         "CA_GUEST_MFA",
         "CA_BREAK_GLASS_EXCLUSION",
+        "CA_HIGH_RISK_SIGN_IN_BLOCK",
+        "CA_RISK_BASED_STEP_UP_MFA",
     }
 )
 

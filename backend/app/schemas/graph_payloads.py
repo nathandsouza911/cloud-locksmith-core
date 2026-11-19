@@ -6,7 +6,22 @@ from app.services.ca_policy_states import CA_POLICY_STATES
 logger = logging.getLogger(__name__)
 
 
+# Every Conditional Access model forbids unknown fields. Pydantic ignores them by
+# default, which silently removed conditions (signInRiskLevels, locations, ...) before
+# the POST/PATCH and turned "block high-risk sign-ins" into "block everyone". A field
+# this schema does not know now fails before anything is written.
+_STRICT = ConfigDict(extra="forbid")
+
+# Read-only properties Graph returns on GET. Rollback re-creates a policy from such a
+# read, so they are dropped here; they are never sent.
+_READ_ONLY_POLICY_FIELDS = frozenset(
+    {"@odata.context", "@odata.type", "id", "templateId", "createdDateTime", "modifiedDateTime", "deletedDateTime"}
+)
+
+
 class ConditionalAccessUsersCondition(BaseModel):
+    model_config = _STRICT
+
     includeUsers: list[str] = Field(default_factory=list)
     excludeUsers: list[str] = Field(default_factory=list)
     includeRoles: list[str] = Field(default_factory=list)
@@ -27,24 +42,45 @@ class ConditionalAccessUsersCondition(BaseModel):
 
 
 class ConditionalAccessApplicationsCondition(BaseModel):
+    model_config = _STRICT
+
     includeApplications: list[str] = Field(default_factory=list)
     excludeApplications: list[str] = Field(default_factory=list)
+    includeUserActions: list[str] | None = None
+    includeAuthenticationContextClassReferences: list[str] | None = None
+    applicationFilter: dict | None = None
 
 
 class ConditionalAccessAuthenticationFlowsCondition(BaseModel):
+    model_config = _STRICT
+
     transferMethods: list[str] | str | None = None
 
 
 class ConditionalAccessConditions(BaseModel):
+    model_config = _STRICT
+
     users: ConditionalAccessUsersCondition
     applications: ConditionalAccessApplicationsCondition | None = None
     clientAppTypes: list[str] = Field(default_factory=list)
     authenticationFlows: ConditionalAccessAuthenticationFlowsCondition | None = None
+    signInRiskLevels: list[str] | None = None
+    userRiskLevels: list[str] | None = None
+    servicePrincipalRiskLevels: list[str] | None = None
+    insiderRiskLevels: str | None = None
+    locations: dict | None = None
+    platforms: dict | None = None
+    devices: dict | None = None
+    clientApplications: dict | None = None
 
 
 class ConditionalAccessGrantControls(BaseModel):
+    model_config = _STRICT
+
     operator: str = "OR"
     builtInControls: list[str] = Field(default_factory=list)
+    customAuthenticationFactors: list[str] | None = None
+    termsOfUse: list[str] | None = None
     authenticationStrength: dict | None = None
 
     @model_validator(mode="after")
@@ -55,10 +91,20 @@ class ConditionalAccessGrantControls(BaseModel):
 
 
 class ConditionalAccessPolicySchema(BaseModel):
+    model_config = _STRICT
+
     displayName: str
     state: str
     conditions: ConditionalAccessConditions
     grantControls: ConditionalAccessGrantControls
+    sessionControls: dict | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_read_only_fields(cls, data):
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if key not in _READ_ONLY_POLICY_FIELDS}
+        return data
 
     @model_validator(mode="after")
     def validate_state(self):
